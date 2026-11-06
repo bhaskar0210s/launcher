@@ -1,0 +1,79 @@
+name: release
+
+# Pushing a tag such as v1.0.0 builds Launcher and publishes it as a free download, then points the Homebrew cask at
+# it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v7
+      - name: Xcode
+        run: |
+          xcodebuild -version
+          swiftc --version
+      - name: Unit tests
+        run: make test
+      # Releases are signed with the project's own certificate, so every version has the same designated
+      # requirement. It is self-signed (not trusted by macOS), which is fine for that.
+      - name: Import the signing certificate
+        env:
+          CERT_P12: ${{ secrets.LAUNCHER_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.LAUNCHER_CERT_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "$CERT_PASSWORD" "$KC"
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p "$CERT_PASSWORD" "$KC"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$CERT_PASSWORD" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -p codesigning "$KC" | grep -q A2C073E9CED9FA3EC731900C46A43F18372A9E86
+          echo "SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+      - name: Build
+        run: make release VERSION="${GITHUB_REF_NAME#v}" SIGN_KEYCHAIN="$SIGN_KEYCHAIN"
+      - name: Package
+        run: |
+          ditto -c -k --keepParent build/Launcher.app Launcher.zip
+          cp build/Launcher.dmg Launcher.dmg
+      # install.sh installs only a download signed with the release key (its public half is in install.sh).
+      - name: Sign
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/key.pem"
+          /usr/bin/openssl dgst -sha256 -sign "$RUNNER_TEMP/key.pem" -out Launcher.zip.sig Launcher.zip
+          rm "$RUNNER_TEMP/key.pem"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" Launcher.dmg Launcher.zip Launcher.zip.sig \
+            --title "Launcher ${GITHUB_REF_NAME#v}" \
+            --notes "Free and open source, for Macs with Apple silicon running macOS 27 or later. Install it with Homebrew: \`brew install ${{ github.repository_owner }}/tap/launcher\`, or download Launcher.dmg and drag Launcher to Applications. See the README for the first launch."
+      # The cask in <owner>/homebrew-tap, updated through a deploy key that can write to that repository.
+      - name: Update the Homebrew cask
+        env:
+          TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
+        run: |
+          if [ -z "$TAP_DEPLOY_KEY" ]; then echo "No TAP_DEPLOY_KEY: skipping"; exit 0; fi
+          version="${GITHUB_REF_NAME#v}"
+          sha=$(shasum -a 256 Launcher.dmg | cut -d' ' -f1)
+          umask 077
+          printf '%s\n' "$TAP_DEPLOY_KEY" > "$RUNNER_TEMP/tap_key"
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/tap_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --depth 1 "git@github.com:${{ github.repository_owner }}/homebrew-tap.git" "$RUNNER_TEMP/tap"
+          cd "$RUNNER_TEMP/tap"
+          sed -i '' -e "s/^  version \".*\"/  version \"$version\"/" -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/launcher.rb
+          git -c user.name=Launcher -c user.email=39916271+bhaskar0210s@users.noreply.github.com commit -qam "Launcher $version"
+          git push -q
+          rm "$RUNNER_TEMP/tap_key"
