@@ -14,15 +14,29 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
+      # A release needs the project's signing secrets. Without them nothing is published from here (a release can
+      # still be made on a Mac with `make release`), and the run says so instead of failing.
+      - name: Check the signing secrets
+        env:
+          CERT_P12: ${{ secrets.LAUNCHER_CERT_P12 }}
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -z "$CERT_P12" ] || [ -z "$RELEASE_SIGNING_KEY" ]; then
+            echo "::notice::The signing secrets aren't set, so this tag isn't released by this workflow."
+            echo "SKIP_RELEASE=1" >> "$GITHUB_ENV"
+          fi
       - name: Xcode
+        if: env.SKIP_RELEASE != '1'
         run: |
           xcodebuild -version
           swiftc --version
       - name: Unit tests
+        if: env.SKIP_RELEASE != '1'
         run: make test
       # Releases are signed with the project's own certificate, so every version has the same designated
       # requirement. It is self-signed (not trusted by macOS), which is fine for that.
       - name: Import the signing certificate
+        if: env.SKIP_RELEASE != '1'
         env:
           CERT_P12: ${{ secrets.LAUNCHER_CERT_P12 }}
           CERT_PASSWORD: ${{ secrets.LAUNCHER_CERT_PASSWORD }}
@@ -39,13 +53,16 @@ jobs:
           security find-identity -p codesigning "$KC" | grep -q A2C073E9CED9FA3EC731900C46A43F18372A9E86
           echo "SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
       - name: Build
+        if: env.SKIP_RELEASE != '1'
         run: make release VERSION="${GITHUB_REF_NAME#v}" SIGN_KEYCHAIN="$SIGN_KEYCHAIN"
       - name: Package
+        if: env.SKIP_RELEASE != '1'
         run: |
           ditto -c -k --keepParent build/Launcher.app Launcher.zip
           cp build/Launcher.dmg Launcher.dmg
       # install.sh installs only a download signed with the release key (its public half is in install.sh).
       - name: Sign
+        if: env.SKIP_RELEASE != '1'
         env:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
@@ -54,6 +71,7 @@ jobs:
           /usr/bin/openssl dgst -sha256 -sign "$RUNNER_TEMP/key.pem" -out Launcher.zip.sig Launcher.zip
           rm "$RUNNER_TEMP/key.pem"
       - name: Publish
+        if: env.SKIP_RELEASE != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -62,6 +80,7 @@ jobs:
             --notes "Free and open source, for Macs with Apple silicon running macOS 27 or later. Install it with Homebrew: \`brew install ${{ github.repository_owner }}/tap/launcher\`, or download Launcher.dmg and drag Launcher to Applications. See the README for the first launch."
       # The cask in <owner>/homebrew-tap, updated through a deploy key that can write to that repository.
       - name: Update the Homebrew cask
+        if: env.SKIP_RELEASE != '1'
         env:
           TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
         run: |
