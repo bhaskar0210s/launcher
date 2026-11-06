@@ -23,6 +23,12 @@ About 490 KB on disk and 9 MB of memory, with no CPU while idle.</p>
 - **A calculator.** Type a sum and the answer appears as you type; <kbd>Return</kbd> copies it. See below.
 - <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>Return</kbd> opens, <kbd>Esc</kbd> closes, <kbd>⌘</kbd><kbd>,</kbd>
   opens the settings and <kbd>⌘</kbd><kbd>Q</kbd> quits.
+- **The search line edits like any Mac text field.** <kbd>←</kbd> <kbd>→</kbd> move the caret, with
+  <kbd>⌥</kbd> a word at a time; <kbd>⌘</kbd><kbd>←</kbd> <kbd>⌘</kbd><kbd>→</kbd> or <kbd>⌃</kbd><kbd>A</kbd>
+  <kbd>⌃</kbd><kbd>E</kbd> go to either end; add <kbd>⇧</kbd> to select. <kbd>⌘</kbd><kbd>A</kbd>,
+  <kbd>⌘</kbd><kbd>X</kbd> <kbd>⌘</kbd><kbd>C</kbd> <kbd>⌘</kbd><kbd>V</kbd>, <kbd>⌥</kbd><kbd>⌫</kbd>,
+  <kbd>⌘</kbd><kbd>⌫</kbd>, <kbd>⌦</kbd>, <kbd>⌃</kbd><kbd>K</kbd> <kbd>⌃</kbd><kbd>D</kbd> <kbd>⌃</kbd><kbd>H</kbd>
+  work too, and a click puts the caret where you click.
 
 ## Calculator
 

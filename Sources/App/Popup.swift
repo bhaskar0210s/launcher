@@ -437,7 +437,11 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         case "q": NSApp.terminate(nil)
         case "w": close()
         case "v": field?.paste()
+        case "a": field?.selectAllText()
+        case "x": _ = field?.copySelection(cut: true)
         case "c":
+            // Selected text in the search line, otherwise the calculator's answer.
+            if field?.copySelection(cut: false) == true { break }
             if let row = list?.rows.first, case .calc(let value, _) = row.kind { copy(plain(value)) }
         default: return false
         }

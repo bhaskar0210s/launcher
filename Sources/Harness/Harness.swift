@@ -39,7 +39,8 @@ private let keyCodes: [String: Int] = [
     "return": kVK_Return, "enter": kVK_ANSI_KeypadEnter, "escape": kVK_Escape, "up": kVK_UpArrow, "down": kVK_DownArrow,
     "pageup": kVK_PageUp, "pagedown": kVK_PageDown, "home": kVK_Home, "end": kVK_End, "delete": kVK_Delete, "tab": kVK_Tab,
     "space": kVK_Space, ",": kVK_ANSI_Comma, "q": kVK_ANSI_Q, "w": kVK_ANSI_W, "v": kVK_ANSI_V, "c": kVK_ANSI_C, "n": kVK_ANSI_N,
-    "p": kVK_ANSI_P,
+    "p": kVK_ANSI_P, "left": kVK_LeftArrow, "right": kVK_RightArrow, "fdelete": kVK_ForwardDelete, "a": kVK_ANSI_A, "e": kVK_ANSI_E,
+    "b": kVK_ANSI_B, "f": kVK_ANSI_F, "k": kVK_ANSI_K, "d": kVK_ANSI_D, "h": kVK_ANSI_H, "x": kVK_ANSI_X,
 ]
 
 @MainActor
@@ -58,6 +59,9 @@ private func send(keyCode: Int, characters: String, flags: NSEvent.ModifierFlags
 private func state() -> String {
     guard let popup = harnessPopup else { return "no popup" }
     var lines = ["open=\(popup.isOpen) settings=\(popup.settingsMode) query=[\(popup.field?.query ?? "")] selected=\(popup.selectedForTesting)"]
+    if let editor = popup.field?.editorForTesting {
+        lines.append("caret=\(editor.caret) selection=\(editor.selection.lowerBound)..<\(editor.selection.upperBound) [\(editor.selectedText)]")
+    }
     if let panel = popup.panel, popup.isOpen {
         let f = panel.frame
         lines.append("frame=\(Int(f.minX)),\(Int(f.minY)),\(Int(f.width))x\(Int(f.height)) key=\(panel.isKeyWindow) window=\(panel.windowNumber)")
