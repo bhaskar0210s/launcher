@@ -272,8 +272,10 @@ check(Calc.parts("42") == ("", "42", ""))
 
 // MARK: Matching and ranking
 
-func ranked(_ query: String, _ names: [String], preferred: Int? = nil, limit: Int = .max) -> [String] {
-    rank(query, names: names, haystacks: names.map(prepare), preferred: preferred, limit: limit).map { names[$0.index] }
+/// `recent` lists names in the order they were last opened, most recent first.
+func ranked(_ query: String, _ names: [String], recent: [String] = [], limit: Int = .max) -> [String] {
+    let recency = names.map { recent.firstIndex(of: $0) }
+    return rank(query, names: names, haystacks: names.map(prepare), recency: recency, limit: limit).map { names[$0.index] }
 }
 
 let apps = ["Safari", "Calculator", "Calendar", "Google Chrome", "Visual Studio Code", "System Settings", "Zed", "Notes",
@@ -301,11 +303,11 @@ check(ranked("gram", ["Telegram"]) == ["Telegram"])                  // looser m
 check(ranked("tube", ["YouTube"]) == ["YouTube"])                    // capitals inside a name start words too
 check(ranked("1p", ["1Password", "Pages"]) == ["1Password"])
 check(ranked("pass", ["Passwords", "1Password"]) == ["Passwords", "1Password"], "\(ranked("pass", ["Passwords", "1Password"]))")
-check(ranked("pass", ["Passwords", "1Password"], preferred: 1) == ["1Password", "Passwords"])
+check(ranked("pass", ["Passwords", "1Password"], recent: ["1Password"]) == ["1Password", "Passwords"])
 check(ranked("edit", ["TextEdit", "BBEdit"]).sorted() == ["BBEdit", "TextEdit"], "\(ranked("edit", ["TextEdit", "BBEdit"]))")
 check(ranked("do", ["2Do", "Docker"]).sorted() == ["2Do", "Docker"])
 check(ranked("cap", ["CapCut", "4KCapture"]).sorted() == ["4KCapture", "CapCut"])
-check(ranked("ma", ["Mail", "Terminal"], preferred: 1) == ["Terminal", "Mail"])   // a loose pick stays, first
+check(ranked("ma", ["Mail", "Terminal"], recent: ["Terminal"]) == ["Mail"])   // a loose match doesn't jump in
 var wordScore = 0, wordPositions: [Int] = []
 check(Query("gc").match(prepare("Google Chrome"), score: &wordScore, positions: &wordPositions, atWords: true) && wordPositions == [0, 7])
 check(Query("ms").match(prepare("Messages Store"), score: &wordScore, positions: &wordPositions, atWords: true) && wordPositions == [0, 9],
@@ -318,8 +320,27 @@ check(ranked("c", apps, limit: 2).count == 2)
 check(ranked("c", apps, limit: 0).isEmpty)
 // The app opened last time for these letters comes first.
 let calculator = apps.firstIndex(of: "Calculator")!
-check(ranked("cal", apps, preferred: calculator) == ["Calculator", "Calendar"])
-check(ranked("saf", apps, preferred: calculator) == ["Safari"])   // only if it matches
+check(ranked("cal", apps, recent: ["Calculator"]) == ["Calculator", "Calendar"])
+check(ranked("saf", apps, recent: ["Calculator"]) == ["Safari"])   // only if it matches
+// The previous selection wins, whatever the letters: the app opened last comes first wherever it matches, even when
+// another one matches better.
+let both = ["Notes", "Notion"]
+check(ranked("no", both) == ["Notes", "Notion"])
+check(ranked("no", both, recent: ["Notion"]) == ["Notion", "Notes"])
+check(ranked("n", both, recent: ["Notion"]) == ["Notion", "Notes"])
+check(ranked("not", both, recent: ["Notion"]) == ["Notion", "Notes"])
+check(ranked("no", both, recent: ["Notes", "Notion"]) == ["Notes", "Notion"])   // a newer pick takes the top
+check(ranked("note", both, recent: ["Notion"]) == ["Notes"])                    // Notion doesn't match "note"
+let s3 = ["Safari", "Slack", "System Settings"]
+check(ranked("s", s3) == ["Slack", "Safari", "System Settings"])                // equal matches: the shorter name first
+check(ranked("s", s3, recent: ["Safari"]) == ["Safari", "Slack", "System Settings"])
+check(ranked("s", s3, recent: ["System Settings", "Safari"]) == ["System Settings", "Safari", "Slack"])
+check(ranked("sa", s3, recent: ["Slack"]) == ["Safari"])                        // only apps that match
+check(ranked("s", s3, recent: ["Zed"]) == ["Slack", "Safari", "System Settings"])  // history of other apps changes nothing
+check(ranked("s", s3, recent: ["Safari"], limit: 1) == ["Safari"])
+// Even a worse match comes first once it was opened last.
+check(ranked("no", ["Notes", "Sticky Notes"]) == ["Notes", "Sticky Notes"])
+check(ranked("no", ["Notes", "Sticky Notes"], recent: ["Sticky Notes"]) == ["Sticky Notes", "Notes"])
 // Accents and other scripts.
 check(ranked("e", ["Éditeur"]) == ["Éditeur"])
 check(ranked("cafe", ["Café Notes", "Code"]) == ["Café Notes"])
@@ -336,35 +357,30 @@ let long = String(repeating: "a", count: 300) + "b"
 check(ranked("ab", [long]) == [long])
 check(ranked("ab", [String(repeating: "a", count: 100_000)]).isEmpty)
 
-// MARK: Picks
+// MARK: Recents
 
-var picks = Picks(capacity: 3)
-check(picks.key(for: "c") == nil)
-picks.remember(query: "c", key: "/Applications/Calculator.app")
-check(picks.key(for: "c") == "/Applications/Calculator.app")
-check(picks.key(for: " C ") == "/Applications/Calculator.app")   // folded and trimmed
-check(picks.key(for: "ca") == nil)
-picks.remember(query: "c", key: "/Applications/Chrome.app")      // a newer pick replaces the old one
-check(picks.key(for: "c") == "/Applications/Chrome.app")
-check(picks.entries.count == 1)
-picks.remember(query: "s", key: "/Applications/Safari.app")
-picks.remember(query: "n", key: "/Applications/Notes.app")
-picks.remember(query: "z", key: "/Applications/Zed.app")          // over capacity: the oldest goes
-check(picks.entries.count == 3)
-check(picks.key(for: "c") == nil)
-check(picks.key(for: "z") == "/Applications/Zed.app")
-picks.remember(query: "", key: "/x.app")
-picks.remember(query: "   ", key: "/x.app")
-picks.remember(query: "q", key: "")
-check(picks.entries.count == 3)
-let restored = Picks(serialized: picks.serialized, capacity: 3)
-check(restored == picks)
-check(Picks(serialized: ["broken", "\u{1F}/a.app", "x\u{1F}", "a\u{1F}/one.app", "a\u{1F}/two.app", "b\u{1F}/b.app"]).entries
-      == [Picks.Entry(query: "a", key: "/one.app"), Picks.Entry(query: "b", key: "/b.app")])
-picks.forget(key: "/Applications/Zed.app")
-check(picks.key(for: "z") == nil)
-check(picks.entries.count == 2)
-check(normalizedQuery("  Ça Va  ") == "ca va")
+var recents = Recents(capacity: 3)
+check(recents.place(of: "/Applications/Safari.app") == nil)
+recents.record("/Applications/Safari.app")
+recents.record("/Applications/Slack.app")
+check(recents.paths == ["/Applications/Slack.app", "/Applications/Safari.app"])
+check(recents.place(of: "/Applications/Slack.app") == 0 && recents.place(of: "/Applications/Safari.app") == 1)
+recents.record("/Applications/Safari.app")      // opened again: back to the front, once
+check(recents.paths == ["/Applications/Safari.app", "/Applications/Slack.app"])
+recents.record("/Applications/Zed.app")
+recents.record("/Applications/Notes.app")        // over capacity: the oldest goes
+check(recents.paths == ["/Applications/Notes.app", "/Applications/Zed.app", "/Applications/Safari.app"])
+recents.record("")
+check(recents.paths.count == 3)
+recents.forget("/Applications/Zed.app")
+check(recents.paths == ["/Applications/Notes.app", "/Applications/Safari.app"])
+check(Recents(paths: recents.paths, capacity: 3) == recents)
+check(Recents(paths: ["/a.app", "", "/b.app", "/a.app"]).paths == ["/a.app", "/b.app"])
+// The memory of earlier versions (letters → app, newest first) becomes the order apps were last opened in.
+let earlier = ["bra\u{1F}/Applications/Brave Browser.app", "br\u{1F}/Applications/Brave Browser.app", "zed\u{1F}/Applications/Zed.app",
+               "sl\u{1F}/Applications/Slack.app", "gh\u{1F}/Applications/Ghostty.app", "broken", "x\u{1F}"]
+check(Recents(picks: earlier).paths == ["/Applications/Brave Browser.app", "/Applications/Zed.app", "/Applications/Slack.app",
+                                        "/Applications/Ghostty.app"], "\(Recents(picks: earlier).paths)")
 
 // MARK: The search line's editing
 

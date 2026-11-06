@@ -6,7 +6,8 @@ import ServiceManagement
 
 enum Defaults {
     static let apps = "apps"
-    static let picks = "picks"
+    static let recents = "recents"  // the apps opened, most recent first
+    static let picks = "picks"      // what versions before 1.2 remembered instead
     static let hotKeyCode = "hotKeyCode"
     static let hotKeyModifiers = "hotKeyModifiers"
     static let launchedBefore = "launchedBefore"

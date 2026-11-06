@@ -185,6 +185,11 @@ private func run(_ line: String) {
             return String(format: "median %.2f ms, max %.2f ms", sorted[sorted.count / 2], sorted.last ?? 0)
         }
         reply("open: \(summary(openTimes)); per keystroke: \(summary(typeTimes)); close: \(summary(closeTimes))")
+    case "click":  // a click on a row, as the pointer would make it
+        popup.listDidClick(Int(argument) ?? 0, onCheck: false)
+        reply("ok")
+    case "recents":
+        reply(UserDefaults.standard.stringArray(forKey: Defaults.recents)?.joined(separator: " | ") ?? "(none)")
     case "pasteboard":
         reply(popup.pasteboard.string(forType: .string) ?? "(empty)")
     case "quit":
@@ -202,6 +207,8 @@ func startHarness(_ popup: Popup) {
     harnessPopup = popup
     Panel.takesKeyboard = false
     popup.screenChooser = builtInScreen
+    // Never a real app: Return and clicks only report what they would open.
+    popup.openForTesting = { path in reply("would open \(path)") }
     // Never the real clipboard: tests copy results and paste text.
     popup.pasteboard = NSPasteboard(name: NSPasteboard.Name("app.launcher.test.\(getpid())"))
     HotKey.testing = true  // the test copy never registers the real shortcut

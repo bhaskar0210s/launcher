@@ -64,19 +64,6 @@ func fold(_ c: UInt32) -> UInt32 {
 
 private let latinBase = Array("aaaaaaaceeeeiiiidnooooo*ouuuuytsaaaaaaaceeeeiiiidnooooo*ouuuuyty".utf8)
 
-/// The text folded and with spaces at either end removed: the form in which queries are remembered.
-func normalizedQuery(_ text: String) -> String {
-    var scalars = decodeUTF8(Array(text.utf8)).map(fold)
-    while let last = scalars.last, isSpace(last) { scalars.removeLast() }
-    var start = 0
-    while start < scalars.count && isSpace(scalars[start]) { start += 1 }
-    var out = ""
-    for c in scalars[start...] {
-        if let scalar = Unicode.Scalar(c) { out.unicodeScalars.append(scalar) }
-    }
-    return out
-}
-
 func isSpace(_ c: UInt32) -> Bool {
     c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D || c == 0xA0 || c == 0x3000
 }

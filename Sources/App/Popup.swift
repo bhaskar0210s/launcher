@@ -68,7 +68,7 @@ final class Panel: NSPanel {
 @MainActor
 final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDelegate {
     let catalog: Catalog
-    private var picks: Picks
+    private var recents: Recents
     private let defaults: UserDefaults
 
     // The window is built only when it opens and torn down when it closes, so a closed Launcher holds no views.
@@ -89,12 +89,20 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     var screenChooser: (() -> NSScreen?)?           // the test harness picks the screen itself
     var offscreenForTesting = false                 // and can keep the window out of sight during long runs
     var pasteboard = NSPasteboard.general           // and copies to a pasteboard of its own
+    var openForTesting: ((String) -> Void)?         // and opens no apps
     private var numbers: (locale: String, grouping: NumberFormatter, decimal: String)?
 
     init(catalog: Catalog, defaults: UserDefaults = .standard) {
         self.catalog = catalog
         self.defaults = defaults
-        picks = Picks(serialized: defaults.stringArray(forKey: Defaults.picks) ?? [])
+        if let saved = defaults.stringArray(forKey: Defaults.recents) {
+            recents = Recents(paths: saved)
+        } else {
+            // Earlier versions remembered the app opened for each set of letters: keep that history, as an order.
+            recents = Recents(picks: defaults.stringArray(forKey: Defaults.picks) ?? [])
+            defaults.set(recents.paths, forKey: Defaults.recents)
+            defaults.removeObject(forKey: Defaults.picks)
+        }
     }
 
     var recording: Bool { page?.recording == true }
@@ -363,8 +371,9 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
                 rows.append(ResultRow(kind: .calc(value, display(value)), name: ""))
             }
             let apps = catalog.apps
-            let preferred = picks.key(for: query).flatMap { key in apps.firstIndex { $0.path == key } }
-            rows += rank(query, names: apps.map(\.name), haystacks: apps.map(\.haystack), preferred: preferred, limit: maxRows - rows.count).map {
+            // The apps opened before come first, the most recent first: the previous selection wins.
+            let recency = apps.map { recents.place(of: $0.path) }
+            rows += rank(query, names: apps.map(\.name), haystacks: apps.map(\.haystack), recency: recency, limit: maxRows - rows.count).map {
                 ResultRow(kind: .app(apps[$0.index].path), name: apps[$0.index].name, bold: $0.positions)
             }
             list.emptyText = apps.isEmpty ? "No apps added yet. Press ⌘, to add some." : "No match. Press ⌘, to add apps."
@@ -466,15 +475,15 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     }
 
     private func activate(_ index: Int) {
-        guard let list, let field, list.rows.indices.contains(index) else { return }
+        guard let list, list.rows.indices.contains(index) else { return }
         let row = list.rows[index]
         if settingsMode {
             guard let path = row.path else { return }
             if catalog.contains(path) {
                 catalog.remove(path)
                 removedHere.append(path)
-                picks.forget(key: path)
-                defaults.set(picks.serialized, forKey: Defaults.picks)
+                recents.forget(path)
+                defaults.set(recents.paths, forKey: Defaults.recents)
             } else {
                 catalog.add(path)
                 removedHere.removeAll { $0 == path }
@@ -489,10 +498,10 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
             copy(plain(value))
             close()
         case .app(let path):
-            picks.remember(query: field.query, key: path)
-            defaults.set(picks.serialized, forKey: Defaults.picks)
+            recents.record(path)  // opened with Return or a click: first in line from now on
+            defaults.set(recents.paths, forKey: Defaults.recents)
             close()
-            open(path)
+            if let openForTesting { openForTesting(path) } else { open(path) }
         }
     }
 
