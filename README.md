@@ -20,8 +20,9 @@ About 490 KB on disk and 9 MB of memory, with no CPU while idle.</p>
   app opens the moment you press <kbd>Return</kbd>. No animations, no waiting for results.
 - **Type the starts of words.** `ma` finds Mail and Maps, `gc` finds Google Chrome, `vsc` finds Visual Studio
   Code.
-- **Your last choice comes first.** When several apps match, the one you opened most recently (with
-  <kbd>Return</kbd> or a click) is on top, whatever letters you type. Open another one and it takes the top spot.
+- **Your last choice comes first.** When several apps match, the one you last chose (with <kbd>↑</kbd>
+  <kbd>↓</kbd> and <kbd>Return</kbd>, or a click) is on top, whatever letters you type. Choose another one and it
+  takes the top spot. Opening the top result with just <kbd>Return</kbd> leaves the order as it is.
 - **A calculator.** Type a sum and the answer appears as you type; <kbd>Return</kbd> copies it. See below.
 - <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>Return</kbd> opens, <kbd>Esc</kbd> closes, <kbd>⌘</kbd><kbd>,</kbd>
   opens the settings and <kbd>⌘</kbd><kbd>Q</kbd> quits.
@@ -76,7 +77,7 @@ another shortcut for Launcher.
 ## Private by design
 
 - Launcher never connects to the internet.
-- It keeps its settings on your Mac: the list of apps, the shortcut, and the order you last opened them in.
+- It keeps its settings on your Mac: the list of apps, the shortcut, and the order you last chose them in.
 - No accounts, no telemetry, no ads. Launcher is free and open source under the MIT License.
 
 ## Install

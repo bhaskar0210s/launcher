@@ -1,5 +1,5 @@
 APP       := Launcher
-VERSION   := 1.2.0
+VERSION   := 1.2.1
 BUILD     := build
 BUNDLE    := $(BUILD)/$(APP).app
 BINARY    := $(BUNDLE)/Contents/MacOS/$(APP)

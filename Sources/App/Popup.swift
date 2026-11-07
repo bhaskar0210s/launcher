@@ -84,6 +84,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     private(set) var settingsMode = false
     private var removedHere: [String] = []  // unchecked in Settings this time: kept in the list to check again
     private var adding = false               // Settings list every installed app, to add some
+    private var choseWithKeys = false        // ↑ ↓ (or Tab, ⌃N, ⌃P…) moved the selection since the results last changed
     private var left: CGFloat = 0, top: CGFloat = 0  // the window's top-left corner while it is open
     private var visible = NSRect.zero                // the part of its screen the window may use
     var screenChooser: (() -> NSScreen?)?           // the test harness picks the screen itself
@@ -380,6 +381,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         }
         // In Settings nothing is selected until there is something to look for: the list is for reading first.
         list.setRows(rows, select: !settingsMode || !Query(query).isEmpty)
+        choseWithKeys = false  // new results: Return on the top one is no choice
         updateFooter()
         if tracing { NSLog("query [%@] %ld rows %.3f ms", query, rows.count, (CACurrentMediaTime() - start) * 1000) }
     }
@@ -426,15 +428,22 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
             } else {
                 close()
             }
-        case #selector(NSResponder.moveUp(_:)), #selector(NSResponder.insertBacktab(_:)): list.move(to: list.selected - 1)
-        case #selector(NSResponder.moveDown(_:)), #selector(NSResponder.insertTab(_:)): list.move(to: list.selected + 1)
-        case #selector(NSResponder.moveToBeginningOfDocument(_:)), #selector(NSResponder.scrollToBeginningOfDocument(_:)): list.move(to: 0)
-        case #selector(NSResponder.moveToEndOfDocument(_:)), #selector(NSResponder.scrollToEndOfDocument(_:)): list.move(to: list.rows.count - 1)
-        case #selector(NSResponder.pageUp(_:)), #selector(NSResponder.scrollPageUp(_:)): list.move(to: list.selected - 8)
-        case #selector(NSResponder.pageDown(_:)), #selector(NSResponder.scrollPageDown(_:)): list.move(to: list.selected + 8)
-        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertLineBreak(_:)): activate(list.selected)
+        case #selector(NSResponder.moveUp(_:)), #selector(NSResponder.insertBacktab(_:)): choose(list.selected - 1)
+        case #selector(NSResponder.moveDown(_:)), #selector(NSResponder.insertTab(_:)): choose(list.selected + 1)
+        case #selector(NSResponder.moveToBeginningOfDocument(_:)), #selector(NSResponder.scrollToBeginningOfDocument(_:)): choose(0)
+        case #selector(NSResponder.moveToEndOfDocument(_:)), #selector(NSResponder.scrollToEndOfDocument(_:)): choose(list.rows.count - 1)
+        case #selector(NSResponder.pageUp(_:)), #selector(NSResponder.scrollPageUp(_:)): choose(list.selected - 8)
+        case #selector(NSResponder.pageDown(_:)), #selector(NSResponder.scrollPageDown(_:)): choose(list.selected + 8)
+        // Return opens the selected app. It counts as a choice only when the arrow keys picked it.
+        case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertLineBreak(_:)): activate(list.selected, chosen: choseWithKeys)
         default: break
         }
+    }
+
+    /// Moves the selection with the keyboard: Return after this is a choice, even back on the first row.
+    private func choose(_ row: Int) {
+        list?.move(to: row)
+        choseWithKeys = true
     }
 
     func handleKeyEquivalent(_ event: NSEvent) -> Bool {
@@ -466,7 +475,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
             list?.selected = row
             return
         }
-        activate(row)
+        activate(row, chosen: true)  // a click is always a choice
     }
 
     /// Icons are drawn once, at the size of the results, and scaled down for the smaller rows of Settings.
@@ -474,7 +483,9 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         catalog.icon(path, points: iconPoints, scale: scale)
     }
 
-    private func activate(_ index: Int) {
+    /// Opens a result (in Settings: adds or removes the app). `chosen`: picked with the arrow keys or a click, not just
+    /// the top result taken with Return. Only a choice moves the app to the front of the order.
+    private func activate(_ index: Int, chosen: Bool) {
         guard let list, list.rows.indices.contains(index) else { return }
         let row = list.rows[index]
         if settingsMode {
@@ -498,8 +509,10 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
             copy(plain(value))
             close()
         case .app(let path):
-            recents.record(path)  // opened with Return or a click: first in line from now on
-            defaults.set(recents.paths, forKey: Defaults.recents)
+            if chosen {  // first in line from now on
+                recents.record(path)
+                defaults.set(recents.paths, forKey: Defaults.recents)
+            }
             close()
             if let openForTesting { openForTesting(path) } else { open(path) }
         }
@@ -532,7 +545,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     /// it back.
     private func removeSelected() {
         guard settingsMode, let list, list.rows.indices.contains(list.selected), list.rows[list.selected].checked == true else { return }
-        activate(list.selected)
+        activate(list.selected, chosen: false)
     }
 
     private func copy(_ text: String) {

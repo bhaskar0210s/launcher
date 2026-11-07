@@ -9,9 +9,9 @@ struct Match {
 /// The names that match `query`, in the order they are offered.
 ///
 /// Letters must start words or follow each other ("gc" finds Google Chrome, "ma" finds Mail but not Terminal); only
-/// when no name matches that way do looser matches count. Among the matches, the apps opened before come first, the
-/// most recently opened first: the previous selection wins, whatever the letters. `recency[i]` is that place for
-/// name `i` (0 for the last one opened), or nil when it was never opened. The others follow by how well they match,
+/// when no name matches that way do looser matches count. Among the matches, the apps chosen before come first, the
+/// most recently chosen first: the previous selection wins, whatever the letters. `recency[i]` is that place for
+/// name `i` (0 for the last one chosen), or nil when it was never chosen. The others follow by how well they match,
 /// then the shorter name, then alphabetical order.
 func rank(_ query: String, names: [String], haystacks: [Haystack], recency: [Int?] = [], limit: Int = .max) -> [Match] {
     let q = Query(query)
@@ -36,7 +36,8 @@ func rank(_ query: String, names: [String], haystacks: [Haystack], recency: [Int
     return matches.count > limit ? Array(matches[..<limit]) : matches
 }
 
-/// The apps opened from Launcher, most recent first. Opening one moves it to the front.
+/// The apps chosen in Launcher (picked with the arrow keys and opened with Return, or clicked), most recent first.
+/// Choosing one moves it to the front; opening the top result with Return alone changes nothing.
 struct Recents: Equatable {
     private(set) var paths: [String] = []
     let capacity: Int
