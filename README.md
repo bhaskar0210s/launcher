@@ -57,11 +57,12 @@ The answer appears as you type, with your region's digit grouping; <kbd>Return</
 
 Press <kbd>⌘</kbd><kbd>,</kbd> while Pounce is open, or open Pounce from the Applications folder.
 
-- **Add App…** opens the Applications folder: choose one app or several.
+- **Type an app's name** to find it among the apps installed on your Mac, then press <kbd>Return</kbd> or click
+  its circle to add it.
+- **Add Apps** lists every installed app, to add several at once: type to narrow the list, click the circles, and
+  press **Done** (or <kbd>Esc</kbd>) to go back to your apps.
 - **Remove** takes the selected app out of the list. It stays on screen, unchecked, until you close the
   settings, so one click puts it back.
-- Or just type an app's name to find it among the installed apps, and press <kbd>Return</kbd> or click its circle
-  to add it or remove it.
 
 The settings also hold the shortcut and launch at login.
 
@@ -111,19 +112,6 @@ git clone https://github.com/bhaskar0210s/pounce.git
 cd pounce
 make install    # builds Pounce.app, copies it to /Applications and starts it
 ```
-
-**Upgrading from Launcher?** Pounce was called Launcher before version 1.3. Homebrew trusts casks from other taps
-by name, so tell it to trust the new name, then move the `launcher` cask over to `pounce`:
-
-```sh
-brew update
-brew trust --cask bhaskar0210s/tap/pounce
-brew migrate --cask launcher
-brew upgrade --cask pounce
-```
-
-Pounce's first launch takes over Launcher's settings: your apps, their order and your shortcut. With the install
-script, just run it again.
 
 The first launch from Applications adds Pounce to your login items and shows its settings, where you add your
 apps. Pounce has no Dock icon and no menu bar icon: press the shortcut to use it, and press <kbd>⌘</kbd><kbd>,</kbd>

@@ -56,15 +56,6 @@ struct Recents: Equatable {
         }
     }
 
-    /// From the memory of earlier versions, which kept the app opened for each query ("query␟path", newest first):
-    /// the apps in the order they were last opened.
-    init(picks: [String], capacity: Int = 500) {
-        self.init(paths: picks.compactMap { line in
-            guard let separator = line.firstIndex(of: "\u{1F}") else { return nil }
-            return String(line[line.index(after: separator)...])
-        }, capacity: capacity)
-    }
-
     /// 0 for the app opened last, 1 for the one before, nil when it was never opened.
     func place(of path: String) -> Int? {
         paths.firstIndex(of: path)

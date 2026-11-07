@@ -376,11 +376,6 @@ recents.forget("/Applications/Zed.app")
 check(recents.paths == ["/Applications/Notes.app", "/Applications/Safari.app"])
 check(Recents(paths: recents.paths, capacity: 3) == recents)
 check(Recents(paths: ["/a.app", "", "/b.app", "/a.app"]).paths == ["/a.app", "/b.app"])
-// The memory of earlier versions (letters → app, newest first) becomes the order apps were last opened in.
-let earlier = ["bra\u{1F}/Applications/Brave Browser.app", "br\u{1F}/Applications/Brave Browser.app", "zed\u{1F}/Applications/Zed.app",
-               "sl\u{1F}/Applications/Slack.app", "gh\u{1F}/Applications/Ghostty.app", "broken", "x\u{1F}"]
-check(Recents(picks: earlier).paths == ["/Applications/Brave Browser.app", "/Applications/Zed.app", "/Applications/Slack.app",
-                                        "/Applications/Ghostty.app"], "\(Recents(picks: earlier).paths)")
 
 // MARK: The search line's editing
 

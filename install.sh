@@ -54,7 +54,3 @@ rm -rf "$target/Pounce.app"
 ditto unpacked/Pounce.app "$target/Pounce.app"
 open "$target/Pounce.app"
 echo "Pounce is installed in $target. Press ⌘Space to open it, and ⌘, in it to add your apps."
-# Pounce was called Launcher before version 1.3. It takes over Launcher's settings by itself.
-if [ "$(defaults read "$target/Launcher.app/Contents/Info" CFBundleIdentifier 2>/dev/null)" = "app.launcher.Launcher" ]; then
-    echo "Launcher, Pounce's old name, is still in $target. Pounce has taken over its settings, so you can delete Launcher."
-fi

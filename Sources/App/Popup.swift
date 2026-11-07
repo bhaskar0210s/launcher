@@ -96,14 +96,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     init(catalog: Catalog, defaults: UserDefaults = .standard) {
         self.catalog = catalog
         self.defaults = defaults
-        if let saved = defaults.stringArray(forKey: Defaults.recents) {
-            recents = Recents(paths: saved)
-        } else {
-            // Earlier versions remembered the app opened for each set of letters: keep that history, as an order.
-            recents = Recents(picks: defaults.stringArray(forKey: Defaults.picks) ?? [])
-            defaults.set(recents.paths, forKey: Defaults.recents)
-            defaults.removeObject(forKey: Defaults.picks)
-        }
+        recents = Recents(paths: defaults.stringArray(forKey: Defaults.recents) ?? [])
     }
 
     var recording: Bool { page?.recording == true }

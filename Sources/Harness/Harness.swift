@@ -188,10 +188,6 @@ private func run(_ line: String) {
     case "click":  // a click on a row, as the pointer would make it
         popup.listDidClick(Int(argument) ?? 0, onCheck: false)
         reply("ok")
-    case "takeover":  // Launcher's settings from a stand-in domain, as a first launch takes them
-        let copied = takeOverSettings(from: argument, into: .standard)
-        popup.catalog.load()
-        reply("copied=\(copied) apps=\(popup.catalog.apps.count)")
     case "recents":
         reply(UserDefaults.standard.stringArray(forKey: Defaults.recents)?.joined(separator: " | ") ?? "(none)")
     case "pasteboard":
