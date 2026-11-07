@@ -36,7 +36,7 @@ func rank(_ query: String, names: [String], haystacks: [Haystack], recency: [Int
     return matches.count > limit ? Array(matches[..<limit]) : matches
 }
 
-/// The apps chosen in Launcher (picked with the arrow keys and opened with Return, or clicked), most recent first.
+/// The apps chosen in Pounce (picked with the arrow keys and opened with Return, or clicked), most recent first.
 /// Choosing one moves it to the front; opening the top result with Return alone changes nothing.
 struct Recents: Equatable {
     private(set) var paths: [String] = []

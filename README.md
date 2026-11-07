@@ -1,6 +1,6 @@
-<p align="center"><img src="docs/icon.png" width="128" alt="Launcher"></p>
+<p align="center"><img src="docs/icon.png" width="128" alt="Pounce"></p>
 
-<h1 align="center">Launcher</h1>
+<h1 align="center">Pounce</h1>
 
 <p align="center"><b>A small, fast app launcher for your Mac.</b><br>
 Press <kbd>⌘</kbd><kbd>Space</kbd>, type a few letters, press <kbd>Return</kbd>. It looks only through the apps you
@@ -8,13 +8,13 @@ choose, and it does sums too.<br>
 About 490 KB on disk and 9 MB of memory, with no CPU while idle.</p>
 
 <p align="center">
-  <img src="docs/search-dark.png" width="430" alt="Launcher finding Mail and Maps in dark mode">
-  <img src="docs/search-light.png" width="430" alt="Launcher finding Mail and Maps in light mode">
+  <img src="docs/search-dark.png" width="430" alt="Pounce finding Mail and Maps in dark mode">
+  <img src="docs/search-light.png" width="430" alt="Pounce finding Mail and Maps in light mode">
 </p>
 
 ## What it does
 
-- **Only your apps.** Launcher searches the apps you add in its settings and nothing else: no files, no web
+- **Only your apps.** Pounce searches the apps you add in its settings and nothing else: no files, no web
   results, no suggestions. The app you want is the one on top.
 - **Instant.** The window appears the moment you press the shortcut, in the middle of your main display, and the
   app opens the moment you press <kbd>Return</kbd>. No animations, no waiting for results.
@@ -55,7 +55,7 @@ The answer appears as you type, with your region's digit grouping; <kbd>Return</
 
 ## Settings
 
-Press <kbd>⌘</kbd><kbd>,</kbd> while Launcher is open, or open Launcher from the Applications folder.
+Press <kbd>⌘</kbd><kbd>,</kbd> while Pounce is open, or open Pounce from the Applications folder.
 
 - **Add App…** opens the Applications folder: choose one app or several.
 - **Remove** takes the selected app out of the list. It stays on screen, unchecked, until you close the
@@ -72,59 +72,63 @@ The settings also hold the shortcut and launch at login.
 
 On a new Mac <kbd>⌘</kbd><kbd>Space</kbd> belongs to Spotlight or the Apps view. When a macOS shortcut uses the
 same keys, the settings say so: turn that shortcut off in System Settings › Keyboard › Keyboard Shortcuts, or pick
-another shortcut for Launcher.
+another shortcut for Pounce.
 
 ## Private by design
 
-- Launcher never connects to the internet.
+- Pounce never connects to the internet.
 - It keeps its settings on your Mac: the list of apps, the shortcut, and the order you last chose them in.
-- No accounts, no telemetry, no ads. Launcher is free and open source under the MIT License.
+- No accounts, no telemetry, no ads. Pounce is free and open source under the MIT License.
 
 ## Install
 
-Launcher runs on Macs with Apple silicon, on macOS 27 or later. Install it with Homebrew:
+Pounce runs on Macs with Apple silicon, on macOS 27 or later. Install it with Homebrew:
 
 ```sh
-brew install bhaskar0210s/tap/launcher
+brew install bhaskar0210s/tap/pounce
 ```
 
 Or without Homebrew, with one command in Terminal:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/bhaskar0210s/launcher/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/bhaskar0210s/pounce/main/install.sh | sh
 ```
 
-It downloads the latest release, checks it against the signature of Launcher's release key, installs it in
-Applications and opens it. After a Homebrew install, open Launcher once from Applications. Either way, macOS opens
+It downloads the latest release, checks it against the signature of Pounce's release key, installs it in
+Applications and opens it. After a Homebrew install, open Pounce once from Applications. Either way, macOS opens
 it without any warning.
 
-**Or download it:** get `Launcher.dmg` from the [latest release](../../releases/latest), open it and drag Launcher
-to Applications. macOS checks apps downloaded in a browser with Apple, and Launcher isn't notarized (that needs a
-paid Apple developer account), so the first time you open it macOS says it can't verify that Launcher is free of
+**Or download it:** get `Pounce.dmg` from the [latest release](../../releases/latest), open it and drag Pounce
+to Applications. macOS checks apps downloaded in a browser with Apple, and Pounce isn't notarized (that needs a
+paid Apple developer account), so the first time you open it macOS says it can't verify that Pounce is free of
 malware. Choose **Done**, then open System Settings → Privacy & Security and click **Open Anyway** next to
-Launcher. You only need to do this once.
+Pounce. You only need to do this once.
 
 **Or build it yourself** with the Xcode command line tools (`xcode-select --install`):
 
 ```sh
-git clone https://github.com/bhaskar0210s/launcher.git
-cd launcher
-make install    # builds Launcher.app, copies it to /Applications and starts it
+git clone https://github.com/bhaskar0210s/pounce.git
+cd pounce
+make install    # builds Pounce.app, copies it to /Applications and starts it
 ```
 
-The first launch from Applications adds Launcher to your login items and shows its settings, where you add your
-apps. Launcher has no Dock icon and no menu bar icon: press the shortcut to use it, and press <kbd>⌘</kbd><kbd>,</kbd>
+**Upgrading from Launcher?** Pounce was called Launcher before version 1.3. `brew upgrade` moves the `launcher`
+cask over to `pounce`, and Pounce's first launch takes over Launcher's settings: your apps, their order and your
+shortcut.
+
+The first launch from Applications adds Pounce to your login items and shows its settings, where you add your
+apps. Pounce has no Dock icon and no menu bar icon: press the shortcut to use it, and press <kbd>⌘</kbd><kbd>,</kbd>
 in it (or open the app again from Applications) for its settings.
 
-To give Launcher <kbd>⌘</kbd><kbd>Space</kbd>, turn off the macOS shortcut that has it in System Settings →
+To give Pounce <kbd>⌘</kbd><kbd>Space</kbd>, turn off the macOS shortcut that has it in System Settings →
 Keyboard → Keyboard Shortcuts: "Show Spotlight search", or "Show Apps" where <kbd>⌘</kbd><kbd>Space</kbd> opens the
-Apps view. Launcher's settings say which one has it, or you can pick another shortcut for Launcher there.
+Apps view. Pounce's settings say which one has it, or you can pick another shortcut for Pounce there.
 
 ## How it stays small
 
 - Swift and AppKit only: no SwiftUI, no web views, no other code. One optimized, stripped binary of about
-  290 KB.
-- No system text field. Launcher reads the keyboard itself (input methods still work), because a text field makes
+  300 KB.
+- No system text field. Pounce reads the keyboard itself (input methods still work), because a text field makes
   macOS start an AutoFill helper process of about 13 MB for the app.
 - Everything is drawn on the CPU straight into the window's layer. AppKit's own drawing moves larger views onto
   the GPU, which loads a couple of megabytes of shaders for good.
@@ -135,7 +139,7 @@ Activity Monitor shows) and `ps`:
 
 | | |
 |---|---|
-| On disk | 492 KB (download: a 250 KB disk image) |
+| On disk | 496 KB (download: a 250 KB disk image) |
 | Memory, 10 seconds after launch | 9.8 MB |
 | Memory, after 10 idle minutes | 9.2 MB |
 | Memory, during 30 minutes of opening, searching, calculating and settings every 2 seconds | about 15 MB, level from the fifth minute |
@@ -147,6 +151,6 @@ Activity Monitor shows) and `ps`:
 
 ```sh
 make test       # unit tests for the calculator, the matching and the ranking (with sanitizers)
-make harness    # build/LauncherTest.app: a copy driven by commands on standard input, for automated tests
+make harness    # build/PounceTest.app: a copy driven by commands on standard input, for automated tests
 make icon       # redraw the app icon (tools/icon.swift)
 ```

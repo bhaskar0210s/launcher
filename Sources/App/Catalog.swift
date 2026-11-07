@@ -1,4 +1,4 @@
-// The apps Launcher looks through: the ones added in Settings. Also finds every installed app, for adding them.
+// The apps Pounce looks through: the ones added in Settings. Also finds every installed app, for adding them.
 
 import AppKit
 

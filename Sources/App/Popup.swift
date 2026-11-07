@@ -15,7 +15,7 @@ private let settingsVisibleRows = 8
 private let footerHeight: CGFloat = 40
 let iconPoints: CGFloat = 28
 
-let tracing = getenv("LAUNCHER_TRACE") != nil
+let tracing = getenv("POUNCE_TRACE") != nil
 
 /// Drawn once into an sRGB bitmap: a mask drawn on demand would be converted by Core Animation for every window.
 @MainActor
@@ -41,11 +41,11 @@ final class Panel: NSPanel {
     init(frame: NSRect) {
         super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         // A fixed depth and color space. Left to the screen's, AppKit and Core Animation convert through a fresh
-        // ColorSync transform for each new window and keep its lookup table. Launcher draws in 8-bit sRGB anyway.
+        // ColorSync transform for each new window and keep its lookup table. Pounce draws in 8-bit sRGB anyway.
         setDynamicDepthLimit(false)
         depthLimit = .twentyfourBitRGB
         colorSpace = .sRGB
-        title = "Launcher"
+        title = "Pounce"
         level = .popUpMenu
         isOpaque = false
         backgroundColor = .clear
@@ -71,7 +71,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     private var recents: Recents
     private let defaults: UserDefaults
 
-    // The window is built only when it opens and torn down when it closes, so a closed Launcher holds no views.
+    // The window is built only when it opens and torn down when it closes, so a closed Pounce holds no views.
     private(set) var panel: Panel?
     private var content: FlippedView?
     private(set) var field: SearchField?
@@ -199,7 +199,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     func close() {
         guard isOpen else { return }
         isOpen = false
-        // Launcher becomes the active app only when it is opened from Finder: hand the keyboard back to the app that
+        // Pounce becomes the active app only when it is opened from Finder: hand the keyboard back to the app that
         // had it.
         if NSApp.isActive { NSApp.hide(nil) }
         if recording { panel?.makeFirstResponder(field) }  // ends the recording and registers the shortcut again
@@ -560,7 +560,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: configuration) { [weak self] _, error in
             guard let error else { return }
-            NSLog("Launcher couldn't open %@: %@", path, error.localizedDescription)
+            NSLog("Pounce couldn't open %@: %@", path, error.localizedDescription)
             // The app was deleted or moved since the list was made: say so with the alert sound, and drop it.
             Task { @MainActor in
                 NSSound.beep()

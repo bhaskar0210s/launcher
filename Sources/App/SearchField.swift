@@ -1,5 +1,5 @@
 // The search line at the top of the window: text with a caret and a selection, edited with the standard macOS keys
-// (arrows, ⌥ for words, ⌘ and ⌃A/⌃E for the ends, ⇧ to select). Launcher reads the keyboard here itself (with input
+// (arrows, ⌥ for words, ⌘ and ⌃A/⌃E for the ends, ⇧ to select). Pounce reads the keyboard here itself (with input
 // method support) instead of using a system text field: those bring the whole text system along, plus an AutoFill
 // helper process.
 
@@ -48,7 +48,7 @@ final class SearchField: CanvasView, @preconcurrency NSTextInputClient {
 
     override var acceptsFirstResponder: Bool { true }
 
-    // With an ordinary keyboard layout Launcher reads keys itself and has no input context: a text input context
+    // With an ordinary keyboard layout Pounce reads keys itself and has no input context: a text input context
     // makes macOS start an AutoFill helper process (about 13 MB). Input methods (Chinese, Japanese, Korean…) need one
     // to compose text, so it exists only while one of them is the current input source.
     override var inputContext: NSTextInputContext? {

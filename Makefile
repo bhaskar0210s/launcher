@@ -1,5 +1,5 @@
-APP       := Launcher
-VERSION   := 1.2.1
+APP       := Pounce
+VERSION   := 1.3.0
 BUILD     := build
 BUNDLE    := $(BUILD)/$(APP).app
 BINARY    := $(BUNDLE)/Contents/MacOS/$(APP)
@@ -17,9 +17,9 @@ APP_SRC   := $(wildcard Sources/App/*.swift)
 SWIFTFLAGS := $(TARGET) -Osize -wmo -Xfrontend -disable-reflection-metadata -Xlinker -dead_strip -warnings-as-errors
 
 # Code signing identity: "-" (ad hoc) for local builds. Releases are signed with the project's own certificate
-# (SHA-1 below), so every version has the same designated requirement: macOS keeps Launcher's login item across
+# (SHA-1 below), so every version has the same designated requirement: macOS keeps Pounce's login item across
 # updates, and Homebrew sees the same signer when it upgrades the cask.
-RELEASE_ID    := A2C073E9CED9FA3EC731900C46A43F18372A9E86
+RELEASE_ID    := FA3A2946AEFA935A257B843235DD55576AAD9870
 SIGN_ID       ?= -
 SIGN_KEYCHAIN ?=
 SIGN          := codesign --force --sign "$(SIGN_ID)" $(if $(SIGN_KEYCHAIN),--keychain "$(SIGN_KEYCHAIN)") --timestamp=none
@@ -46,13 +46,13 @@ $(BINARY): $(CORE_SRC) $(APP_SRC)
 
 $(BUNDLE)/Contents/Info.plist: resources/Info.plist Makefile
 	@mkdir -p $(@D)
-	@sed -e 's/__VERSION__/$(VERSION)/g' -e 's/__IDENTIFIER__/app.launcher.Launcher/g' -e 's/__NAME__/$(APP)/g' $< > $@
+	@sed -e 's/__VERSION__/$(VERSION)/g' -e 's/__IDENTIFIER__/app.pounce.Pounce/g' -e 's/__NAME__/$(APP)/g' $< > $@
 
 $(BUNDLE)/Contents/Resources/$(APP).icns: $(ICON)
 	@mkdir -p $(@D)
 	@cp $< $@
 
-# A disk image to drag Launcher into Applications from.
+# A disk image to drag Pounce into Applications from.
 dmg: app
 	@rm -rf $(BUILD)/dmg $(DMG)
 	@mkdir -p $(BUILD)/dmg
@@ -77,16 +77,16 @@ test: $(BUILD)/tests
 
 $(BUILD)/tests: $(CORE_SRC) tests/main.swift
 	@mkdir -p $(@D)
-	$(SWIFTC) $(TARGET) -Onone -g -sanitize=address,undefined -module-name LauncherTests $^ -o $@
+	$(SWIFTC) $(TARGET) -Onone -g -sanitize=address,undefined -module-name PounceTests $^ -o $@
 
 # A copy for automated testing, with its own bundle id and settings. It takes commands from a pipe and its window
 # never takes the keyboard, so it can't catch what someone types elsewhere. See Sources/Harness.
-HARNESS := $(BUILD)/LauncherTest.app
+HARNESS := $(BUILD)/PounceTest.app
 harness: $(CORE_SRC) $(APP_SRC) $(wildcard Sources/Harness/*.swift) resources/Info.plist
 	@mkdir -p $(HARNESS)/Contents/MacOS $(HARNESS)/Contents/Resources
 	$(SWIFTC) $(TARGET) -Osize -wmo -D HARNESS -module-name $(APP) $(CORE_SRC) $(APP_SRC) $(wildcard Sources/Harness/*.swift) \
 		-o $(HARNESS)/Contents/MacOS/$(APP)
-	@sed -e 's/__VERSION__/$(VERSION)/g' -e 's/__IDENTIFIER__/app.launcher.LauncherTest/g' -e 's/__NAME__/LauncherTest/g' resources/Info.plist \
+	@sed -e 's/__VERSION__/$(VERSION)/g' -e 's/__IDENTIFIER__/app.pounce.PounceTest/g' -e 's/__NAME__/PounceTest/g' resources/Info.plist \
 		> $(HARNESS)/Contents/Info.plist
 	@if [ -f $(ICON) ]; then cp $(ICON) $(HARNESS)/Contents/Resources/; fi
 	@codesign --force --sign - --entitlements resources/debug.entitlements $(HARNESS)

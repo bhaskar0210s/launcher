@@ -1,4 +1,4 @@
-// Test harness (built only by `make harness`): LauncherTest reads commands from standard input and answers on
+// Test harness (built only by `make harness`): PounceTest reads commands from standard input and answers on
 // standard output. Its window never takes the keyboard and opens only on a Mac's built-in display, so testing can't
 // catch what someone types in other apps or cover the screens they work on.
 //
@@ -188,6 +188,10 @@ private func run(_ line: String) {
     case "click":  // a click on a row, as the pointer would make it
         popup.listDidClick(Int(argument) ?? 0, onCheck: false)
         reply("ok")
+    case "takeover":  // Launcher's settings from a stand-in domain, as a first launch takes them
+        let copied = takeOverSettings(from: argument, into: .standard)
+        popup.catalog.load()
+        reply("copied=\(copied) apps=\(popup.catalog.apps.count)")
     case "recents":
         reply(UserDefaults.standard.stringArray(forKey: Defaults.recents)?.joined(separator: " | ") ?? "(none)")
     case "pasteboard":
@@ -210,7 +214,7 @@ func startHarness(_ popup: Popup) {
     // Never a real app: Return and clicks only report what they would open.
     popup.openForTesting = { path in reply("would open \(path)") }
     // Never the real clipboard: tests copy results and paste text.
-    popup.pasteboard = NSPasteboard(name: NSPasteboard.Name("app.launcher.test.\(getpid())"))
+    popup.pasteboard = NSPasteboard(name: NSPasteboard.Name("app.pounce.test.\(getpid())"))
     HotKey.testing = true  // the test copy never registers the real shortcut
     let input = FileHandle.standardInput
     Thread.detachNewThread {

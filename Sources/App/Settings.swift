@@ -1,5 +1,5 @@
 // Settings, shown inside the search window itself (⌘,): the shortcut, launch at login and, below them, the apps.
-// Everything is drawn by Launcher: a separate window and the standard controls would cost megabytes for two options.
+// Everything is drawn by Pounce: a separate window and the standard controls would cost megabytes for two options.
 
 import AppKit
 import Carbon
@@ -221,7 +221,7 @@ final class SettingsPage: CanvasView {
     }
 
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
-    override func accessibilityLabel() -> String? { "Launcher Settings" }
+    override func accessibilityLabel() -> String? { "Pounce Settings" }
 }
 
 /// The bottom of the settings: Add Apps (Done while adding) and Remove for the list above, and Quit.
@@ -255,12 +255,12 @@ final class SettingsFooter: CanvasView {
         add.toolTip = "Find installed apps to add"
         remove.title = "Remove"
         remove.glyph = .minus
-        remove.toolTip = "Remove the selected app from Launcher"
+        remove.toolTip = "Remove the selected app from Pounce"
         remove.isEnabled = false
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         quit.title = "Quit"
         quit.glyph = .power
-        quit.toolTip = "Quit Launcher \(version) (⌘Q)"
+        quit.toolTip = "Quit Pounce \(version) (⌘Q)"
         quit.action = { NSApp.terminate(nil) }
         for button in [add, remove, quit] { addSubview(button) }
     }

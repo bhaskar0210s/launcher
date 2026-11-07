@@ -7,9 +7,9 @@
 	<key>CFBundleDisplayName</key>
 	<string>__NAME__</string>
 	<key>CFBundleExecutable</key>
-	<string>Launcher</string>
+	<string>Pounce</string>
 	<key>CFBundleIconFile</key>
-	<string>Launcher</string>
+	<string>Pounce</string>
 	<key>CFBundleIdentifier</key>
 	<string>__IDENTIFIER__</string>
 	<key>CFBundleInfoDictionaryVersion</key>

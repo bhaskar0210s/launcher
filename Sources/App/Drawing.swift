@@ -156,7 +156,7 @@ enum Glyph {
     case search, equals, check, power, plus, minus
 }
 
-/// Draws one of Launcher's glyphs into a square of a flipped view.
+/// Draws one of Pounce's glyphs into a square of a flipped view.
 func drawGlyph(_ glyph: Glyph, in box: NSRect, color: NSColor) {
     let s = min(box.width, box.height)
     let x0 = box.minX + (box.width - s) / 2, y0 = box.minY + (box.height - s) / 2

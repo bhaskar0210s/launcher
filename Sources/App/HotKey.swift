@@ -21,7 +21,7 @@ enum HotKey {
             }, 1, &spec, nil, &handler)
         }
         unregister()
-        let id = EventHotKeyID(signature: 0x6C6E_6368, id: 1)  // 'lnch'
+        let id = EventHotKeyID(signature: 0x706E_6365, id: 1)  // 'pnce'
         isRegistered = RegisterEventHotKey(keyCode, modifiers, id, GetApplicationEventTarget(), 0, &hotKey) == noErr
         if tracing { NSLog("shortcut %@ %@", shortcutName(keyCode: keyCode, modifiers: modifiers), isRegistered ? "registered" : "not registered") }
         return isRegistered
@@ -35,7 +35,7 @@ enum HotKey {
 
     static let defaultKey = (keyCode: UInt32(kVK_Space), modifiers: UInt32(cmdKey))
 
-    /// The shortcut in the settings, or ⌘Space when what is saved there isn't one Launcher understands.
+    /// The shortcut in the settings, or ⌘Space when what is saved there isn't one Pounce understands.
     static var saved: (keyCode: UInt32, modifiers: UInt32) {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: Defaults.hotKeyCode) != nil else { return defaultKey }
@@ -176,7 +176,7 @@ final class ShortcutField: CanvasView {
         window?.makeFirstResponder(self)
         recording = true
         live = 0
-        HotKey.unregister()  // so pressing the current shortcut records it instead of closing Launcher
+        HotKey.unregister()  // so pressing the current shortcut records it instead of closing Pounce
         needsDisplay = true
     }
 
@@ -246,7 +246,7 @@ final class ShortcutField: CanvasView {
     // VoiceOver: a button that starts recording.
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
-    override func accessibilityLabel() -> String? { "Shortcut to open Launcher" }
+    override func accessibilityLabel() -> String? { "Shortcut to open Pounce" }
     override func accessibilityValue() -> Any? { recording ? "Type shortcut" : shortcutName(keyCode: keyCode, modifiers: modifiers) }
     override func accessibilityPerformPress() -> Bool {
         if !recording { startRecording() }

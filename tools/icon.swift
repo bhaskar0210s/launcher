@@ -1,4 +1,4 @@
-// Renders Launcher's app icon into an .icns file (see `make icon`): a grid of nine app tiles on a graphite
+// Renders Pounce's app icon into an .icns file (see `make icon`): a grid of nine app tiles on a graphite
 // tile, the middle one lifted and lit with an arrow pointing up, the app being launched.
 
 import CoreGraphics

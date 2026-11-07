@@ -1,6 +1,6 @@
 name: release
 
-# Pushing a tag such as v1.0.0 builds Launcher and publishes it as a free download, then points the Homebrew cask at
+# Pushing a tag such as v1.0.0 builds Pounce and publishes it as a free download, then points the Homebrew cask at
 # it.
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
       # still be made on a Mac with `make release`), and the run says so instead of failing.
       - name: Check the signing secrets
         env:
-          CERT_P12: ${{ secrets.LAUNCHER_CERT_P12 }}
+          CERT_P12: ${{ secrets.POUNCE_CERT_P12 }}
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
         run: |
           if [ -z "$CERT_P12" ] || [ -z "$RELEASE_SIGNING_KEY" ]; then
@@ -38,8 +38,8 @@ jobs:
       - name: Import the signing certificate
         if: env.SKIP_RELEASE != '1'
         env:
-          CERT_P12: ${{ secrets.LAUNCHER_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.LAUNCHER_CERT_PASSWORD }}
+          CERT_P12: ${{ secrets.POUNCE_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.POUNCE_CERT_PASSWORD }}
         run: |
           KC="$RUNNER_TEMP/signing.keychain-db"
           security create-keychain -p "$CERT_PASSWORD" "$KC"
@@ -50,7 +50,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$CERT_PASSWORD" "$KC" > /dev/null
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           rm -f "$RUNNER_TEMP/cert.p12"
-          security find-identity -p codesigning "$KC" | grep -q A2C073E9CED9FA3EC731900C46A43F18372A9E86
+          security find-identity -p codesigning "$KC" | grep -q FA3A2946AEFA935A257B843235DD55576AAD9870
           echo "SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
       - name: Build
         if: env.SKIP_RELEASE != '1'
@@ -58,8 +58,8 @@ jobs:
       - name: Package
         if: env.SKIP_RELEASE != '1'
         run: |
-          ditto -c -k --keepParent build/Launcher.app Launcher.zip
-          cp build/Launcher.dmg Launcher.dmg
+          ditto -c -k --keepParent build/Pounce.app Pounce.zip
+          cp build/Pounce.dmg Pounce.dmg
       # install.sh installs only a download signed with the release key (its public half is in install.sh).
       - name: Sign
         if: env.SKIP_RELEASE != '1'
@@ -68,16 +68,16 @@ jobs:
         run: |
           umask 077
           printf '%s\n' "$RELEASE_SIGNING_KEY" > "$RUNNER_TEMP/key.pem"
-          /usr/bin/openssl dgst -sha256 -sign "$RUNNER_TEMP/key.pem" -out Launcher.zip.sig Launcher.zip
+          /usr/bin/openssl dgst -sha256 -sign "$RUNNER_TEMP/key.pem" -out Pounce.zip.sig Pounce.zip
           rm "$RUNNER_TEMP/key.pem"
       - name: Publish
         if: env.SKIP_RELEASE != '1'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" Launcher.dmg Launcher.zip Launcher.zip.sig \
-            --title "Launcher ${GITHUB_REF_NAME#v}" \
-            --notes "Free and open source, for Macs with Apple silicon running macOS 27 or later. Install it with Homebrew: \`brew install ${{ github.repository_owner }}/tap/launcher\`, or download Launcher.dmg and drag Launcher to Applications. See the README for the first launch."
+          gh release create "$GITHUB_REF_NAME" Pounce.dmg Pounce.zip Pounce.zip.sig \
+            --title "Pounce ${GITHUB_REF_NAME#v}" \
+            --notes "Free and open source, for Macs with Apple silicon running macOS 27 or later. Install it with Homebrew: \`brew install ${{ github.repository_owner }}/tap/pounce\`, or download Pounce.dmg and drag Pounce to Applications. See the README for the first launch."
       # The cask in <owner>/homebrew-tap, updated through a deploy key that can write to that repository.
       - name: Update the Homebrew cask
         if: env.SKIP_RELEASE != '1'
@@ -86,13 +86,13 @@ jobs:
         run: |
           if [ -z "$TAP_DEPLOY_KEY" ]; then echo "No TAP_DEPLOY_KEY: skipping"; exit 0; fi
           version="${GITHUB_REF_NAME#v}"
-          sha=$(shasum -a 256 Launcher.dmg | cut -d' ' -f1)
+          sha=$(shasum -a 256 Pounce.dmg | cut -d' ' -f1)
           umask 077
           printf '%s\n' "$TAP_DEPLOY_KEY" > "$RUNNER_TEMP/tap_key"
           export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/tap_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
           git clone --depth 1 "git@github.com:${{ github.repository_owner }}/homebrew-tap.git" "$RUNNER_TEMP/tap"
           cd "$RUNNER_TEMP/tap"
-          sed -i '' -e "s/^  version \".*\"/  version \"$version\"/" -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/launcher.rb
-          git -c user.name=Launcher -c user.email=39916271+bhaskar0210s@users.noreply.github.com commit -qam "Launcher $version"
+          sed -i '' -e "s/^  version \".*\"/  version \"$version\"/" -e "s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/pounce.rb
+          git -c user.name=Pounce -c user.email=39916271+bhaskar0210s@users.noreply.github.com commit -qam "Pounce $version"
           git push -q
           rm "$RUNNER_TEMP/tap_key"

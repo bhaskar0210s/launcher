@@ -1,5 +1,5 @@
 // The rows under the search line: apps (with the typed letters in bold) and the calculator's answer. In Settings
-// the same list shows a check mark on each app that Launcher looks through. Drawn on the CPU, scrolled by Launcher.
+// the same list shows a check mark on each app that Pounce looks through. Drawn on the CPU, scrolled by Pounce.
 
 import AppKit
 import CoreText

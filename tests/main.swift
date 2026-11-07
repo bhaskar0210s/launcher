@@ -166,7 +166,7 @@ expect("10.15.7", nil)
 expect("555 1234", nil)
 expect("e2", nil)
 expect("(2)3", nil)
-// Where "," is the decimal separator, "." groups thousands, as Launcher shows them there.
+// Where "," is the decimal separator, "." groups thousands, as Pounce shows them there.
 expect("1.234,56*2", "2469.12", decimal: ",")
 expect("1.234,5+1", "1235.5", decimal: ",")
 expect("1.000.000+1", "1000001", decimal: ",")
