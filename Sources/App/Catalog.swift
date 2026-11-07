@@ -1,4 +1,5 @@
-// The apps Pounce looks through: the ones added in Settings. Also finds every installed app, for adding them.
+// What Pounce looks through: the apps added in Settings, and the notes added from Notes. Also finds every installed
+// app, for adding them.
 
 import AppKit
 
@@ -8,10 +9,27 @@ struct AppEntry {
     let haystack: Haystack
 }
 
+struct NoteEntry {
+    let note: Note
+    let link: String  // applenotes:note/…, which opens it, and its key in the order of choices
+    let haystack: Haystack
+
+    var id: String { note.id }
+    var title: String { note.title }
+}
+
+/// Where Notes keeps its notes.
+let notesDatabasePath = NSHomeDirectory() + "/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite"
+
 @MainActor
 final class Catalog {
+    /// Notes, which opens the notes added to Pounce.
+    static let notesApp = "/System/Applications/Notes.app"
+
     /// The added apps that exist, by name.
     private(set) var apps: [AppEntry] = []
+    /// The added notes, by title.
+    private(set) var notes: [NoteEntry] = []
     /// Everything added, as saved: an app on a disk that isn't connected stays in the list for when it is.
     private var paths: [String] = []
     private var icons: [String: CGImage] = [:]  // by path
@@ -33,6 +51,7 @@ final class Catalog {
             if seen.insert(realPath(standard)).inserted { paths.append(standard) }
         }
         rebuild()
+        loadNotes()
     }
 
     /// Checks that the added apps are where they were: an app on a disk connected later appears, a deleted one goes.
@@ -93,6 +112,60 @@ final class Catalog {
         paths.removeAll { realPath($0) == real }
         save()
         rebuild()
+    }
+
+    func isNotesApp(_ path: String) -> Bool {
+        realPath((path as NSString).standardizingPath) == realPath(Catalog.notesApp)
+    }
+
+    // MARK: Notes
+
+    /// The saved notes, tidied like the apps: entries that aren't a note identifier and a title are skipped.
+    private func loadNotes() {
+        var seen = Set<String>()
+        var loaded: [Note] = []
+        for case let item as [String: String] in defaults.array(forKey: Defaults.notes) ?? [] {
+            guard let id = item["id"], let title = item["title"].map(noteTitle), !title.isEmpty, noteLink(id) != nil,
+                  seen.insert(id).inserted else { continue }
+            loaded.append(Note(id: id, title: title))
+        }
+        setNotes(loaded)
+    }
+
+    private func setNotes(_ list: [Note]) {
+        notes = list.compactMap { note in noteLink(note.id).map { NoteEntry(note: note, link: $0, haystack: prepare(note.title)) } }
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    private func saveNotes() {
+        defaults.set(notes.map { ["id": $0.id, "title": $0.title] }, forKey: Defaults.notes)
+    }
+
+    func containsNote(_ id: String) -> Bool {
+        notes.contains { $0.id == id }
+    }
+
+    func addNote(_ note: Note) {
+        guard !containsNote(note.id), noteLink(note.id) != nil else { return }
+        setNotes(notes.map(\.note) + [note])
+        saveNotes()
+    }
+
+    func removeNote(_ id: String) {
+        setNotes(notes.map(\.note).filter { $0.id != id })
+        saveNotes()
+    }
+
+    /// Takes the titles Notes has now, and drops the added notes it no longer has (deleted ones). Returns whether
+    /// anything changed. An empty Notes (an account turned off for a moment) changes nothing.
+    @discardableResult
+    func updateNotes(from current: [Note]) -> Bool {
+        guard !current.isEmpty else { return false }
+        let updated = notes.compactMap { entry in current.first { $0.id == entry.id } }  // a handful of notes
+        guard updated != notes.map(\.note) else { return false }
+        setNotes(updated)
+        saveNotes()
+        return true
     }
 
     // MARK: Icons

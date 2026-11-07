@@ -153,7 +153,7 @@ func textWidth(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular) 
 // MARK: Glyphs
 
 enum Glyph {
-    case search, equals, check, power, plus, minus
+    case search, equals, check, power, plus, minus, note
 }
 
 /// Draws one of Pounce's glyphs into a square of a flipped view.
@@ -194,6 +194,14 @@ func drawGlyph(_ glyph: Glyph, in box: NSRect, color: NSColor) {
         path.appendArc(withCenter: p(0.5, 0.54), radius: 0.34 * s, startAngle: -58, endAngle: 238, clockwise: false)
         path.move(to: p(0.5, 0.1))
         path.line(to: p(0.5, 0.5))
+    case .note:
+        // A page with three lines of writing, the last one short.
+        path.lineWidth = max(1.2, s * 0.08)
+        path.appendRoundedRect(NSRect(x: x0 + 0.17 * s, y: y0 + 0.08 * s, width: 0.66 * s, height: 0.84 * s), xRadius: 0.12 * s, yRadius: 0.12 * s)
+        for (y, end) in [(0.32, 0.67), (0.5, 0.67), (0.68, 0.52)] {
+            path.move(to: p(0.33, y))
+            path.line(to: p(end, y))
+        }
     }
     path.stroke()
 }

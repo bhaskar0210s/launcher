@@ -1,5 +1,6 @@
-// The rows under the search line: apps (with the typed letters in bold) and the calculator's answer. In Settings
-// the same list shows a check mark on each app that Pounce looks through. Drawn on the CPU, scrolled by Pounce.
+// The rows under the search line: apps and notes (with the typed letters in bold) and the calculator's answer. In
+// Settings the same list shows a check mark on each app and note that Pounce looks through. Drawn on the CPU,
+// scrolled by Pounce.
 
 import AppKit
 import CoreText
@@ -7,12 +8,16 @@ import CoreText
 struct ResultRow {
     enum Kind {
         case app(String)           // path
+        case note(String)          // Notes' identifier for it
         case calc(Double, String)  // the value, and how it's shown
     }
     var kind: Kind
     var name = ""
     var bold: [Int] = []
-    var checked: Bool?             // Settings: whether the app is added
+    var checked: Bool?             // Settings: whether the app or note is added
+    var accessory: String?         // Settings: a button in the row ("Choose Notes")
+    var indented = false           // Settings: a note, under Notes
+    var detail: String?            // grey, at the right: the app a note opens in
     var line: CTLine?              // built on first draw
 
     var path: String? {
@@ -23,15 +28,21 @@ struct ResultRow {
 
 @MainActor
 protocol ResultListDelegate: AnyObject {
-    /// A click on a row; `onCheck` when it landed on the row's circle (Settings).
-    func listDidClick(_ row: Int, onCheck: Bool)
+    /// A click on a row: on the row itself, on its circle (Settings) or on its button (Settings).
+    func listDidClick(_ row: Int, part: ResultList.Part)
     func icon(for path: String, points: CGFloat, scale: CGFloat) -> CGImage?
 }
 
 let gutter: CGFloat = 6        // between the window's edge and a row's highlight
 private let inset: CGFloat = 10  // between a highlight's edge and its contents
+private let noteIndent: CGFloat = 30  // a note under Notes
+private let accessorySize: CGFloat = 12
 
 final class ResultList: CanvasView {
+    enum Part {
+        case row, check, accessory
+    }
+
     weak var delegate: ResultListDelegate?
     var rowHeight: CGFloat = 44
     var iconSize: CGFloat = 28
@@ -97,6 +108,18 @@ final class ResultList: CanvasView {
 
     func rect(ofRow index: Int) -> NSRect {
         NSRect(x: gutter, y: gutter + CGFloat(index) * rowHeight - offset, width: bounds.width - 2 * gutter, height: rowHeight)
+    }
+
+    /// The circle at the right end of a Settings row.
+    private func checkRect(in box: NSRect) -> NSRect {
+        NSRect(x: box.maxX - inset - 20, y: (box.midY - 10).rounded(), width: 20, height: 20)
+    }
+
+    /// A row's button, left of its circle.
+    private func accessoryRect(_ title: String, in box: NSRect, hasCheck: Bool) -> NSRect {
+        let width = textWidth(title, size: accessorySize, weight: .medium) + 20
+        let right = hasCheck ? checkRect(in: box).minX - 12 : box.maxX - inset
+        return NSRect(x: right - width, y: (box.midY - 11).rounded(), width: width, height: 22)
     }
 
     private func row(at point: NSPoint) -> Int {
@@ -181,24 +204,43 @@ final class ResultList: CanvasView {
                 rows[index].line = line
                 drawLine(context, line, x: x, top: box.minY, height: box.height, font: resultFont, color: isSelected ? selectedText : label)
 
-            case .app(let path):
-                if let icon = delegate?.icon(for: path, points: iconSize, scale: scale) {
-                    context.saveGState()
-                    context.interpolationQuality = .high
-                    // The view is flipped; a CGImage is drawn upright by flipping it back within its box.
-                    context.translateBy(x: iconBox.minX, y: iconBox.maxY)
-                    context.scaleBy(x: 1, y: -1)
-                    context.draw(icon, in: CGRect(x: 0, y: 0, width: iconBox.width, height: iconBox.height))
-                    context.restoreGState()
+            case .app, .note:
+                let row = rows[index]
+                let shift = row.indented ? noteIndent : 0
+                let rowIcon = iconBox.offsetBy(dx: shift, dy: 0), textX = x + shift
+                if case .app(let path) = row.kind {
+                    drawIcon(path, in: rowIcon, scale: scale, context: context)
+                } else if row.checked != nil {
+                    // In Settings a note has a small page where an app has its icon.
+                    let page = NSRect(x: rowIcon.midX - 8, y: (rowIcon.midY - 8).rounded(), width: 16, height: 16)
+                    drawGlyph(.note, in: page, color: isSelected ? white : .secondaryLabelColor)
+                } else {
+                    drawIcon(Catalog.notesApp, in: rowIcon, scale: scale, context: context)  // a note opens in Notes
                 }
-                if let checked = rows[index].checked {
-                    let circle = NSRect(x: right - 20, y: (box.midY - 10).rounded(), width: 20, height: 20)
+                if let checked = row.checked {
+                    let circle = checkRect(in: box)
                     drawCheck(checked, in: circle, onAccent: isSelected)
                     right = circle.minX - 12
                 }
-                let line = rows[index].line ?? makeLine(rows[index].name, font: font, bold: boldFont, emphasized: rows[index].bold, width: right - x)
+                if let accessory = row.accessory {
+                    let button = accessoryRect(accessory, in: box, hasCheck: row.checked != nil)
+                    (isSelected ? white.withAlphaComponent(0.22) : NSColor.labelColor.withAlphaComponent(0.08)).setFill()
+                    NSBezierPath(roundedRect: button, xRadius: 6, yRadius: 6).fill()
+                    drawText(accessory, x: button.minX + 10, midY: button.midY, size: accessorySize, weight: .medium,
+                             color: isSelected ? white : .secondaryLabelColor)
+                    right = button.minX - 12
+                }
+                if let detail = row.detail {
+                    let detailFont = NSFont.systemFont(ofSize: 12)
+                    let text = makeLine(detail, font: detailFont)
+                    let detailWidth = lineWidth(text)
+                    drawLine(context, text, x: right - detailWidth, top: box.minY, height: box.height, font: detailFont,
+                             color: isSelected ? selectedSecondary : secondary)
+                    right -= detailWidth + 12
+                }
+                let line = row.line ?? makeLine(row.name, font: font, bold: boldFont, emphasized: row.bold, width: right - textX)
                 rows[index].line = line
-                drawLine(context, line, x: x, top: box.minY, height: box.height, font: font, color: isSelected ? selectedText : label)
+                drawLine(context, line, x: textX, top: box.minY, height: box.height, font: font, color: isSelected ? selectedText : label)
             }
         }
 
@@ -210,6 +252,17 @@ final class ResultList: CanvasView {
             NSColor.tertiaryLabelColor.setFill()
             NSBezierPath(roundedRect: NSRect(x: width - 5, y: y + 2, width: 3, height: knob - 4), xRadius: 1.5, yRadius: 1.5).fill()
         }
+    }
+
+    private func drawIcon(_ path: String, in box: NSRect, scale: CGFloat, context: CGContext) {
+        guard let icon = delegate?.icon(for: path, points: iconSize, scale: scale) else { return }
+        context.saveGState()
+        context.interpolationQuality = .high
+        // The view is flipped; a CGImage is drawn upright by flipping it back within its box.
+        context.translateBy(x: box.minX, y: box.maxY)
+        context.scaleBy(x: 1, y: -1)
+        context.draw(icon, in: CGRect(x: 0, y: 0, width: box.width, height: box.height))
+        context.restoreGState()
     }
 
     /// A filled circle with a check mark for an added app, an empty ring for the others.
@@ -252,9 +305,16 @@ final class ResultList: CanvasView {
         let point = convert(event.locationInWindow, from: nil)
         let row = row(at: point)
         if row >= 0 && row == pressed {
+            let box = rect(ofRow: row)
+            var part = Part.row
             // The circle sits at the right end of a Settings row; the area around it counts, for easy clicking.
-            let onCheck = rows[row].checked != nil && point.x >= rect(ofRow: row).maxX - inset - 36
-            delegate?.listDidClick(row, onCheck: onCheck)
+            if rows[row].checked != nil && point.x >= box.maxX - inset - 36 {
+                part = .check
+            } else if let accessory = rows[row].accessory,
+                      accessoryRect(accessory, in: box, hasCheck: rows[row].checked != nil).insetBy(dx: -4, dy: -6).contains(point) {
+                part = .accessory
+            }
+            delegate?.listDidClick(row, part: part)
         }
         pressed = -1
     }
@@ -281,8 +341,16 @@ final class ResultList: CanvasView {
             switch row.kind {
             case .calc(_, let shown): element.setAccessibilityLabel("Result \(shown). Press Return to copy it.")
             case .app: element.setAccessibilityLabel(row.name)
+            case .note: element.setAccessibilityLabel("\(row.name), a note in Notes")
             }
             if let checked = row.checked { element.setAccessibilityValue(NSNumber(value: checked)) }
+            if let accessory = row.accessory {
+                // VoiceOver offers the row's button as an action of the row.
+                element.setAccessibilityCustomActions([NSAccessibilityCustomAction(name: accessory) { [weak self] in
+                    self?.delegate?.listDidClick(index, part: .accessory)
+                    return true
+                }])
+            }
             element.setAccessibilityFrameInParentSpace(rect(ofRow: index))
             element.setAccessibilitySelected(index == selected)
             return element

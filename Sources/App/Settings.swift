@@ -118,13 +118,23 @@ private func systemShortcutUsing(keyCode: UInt32, modifiers: UInt32) -> String? 
     return nil
 }
 
-/// The shortcut and launch at login, with a note when the shortcut can't work, and the heading of the app list.
+/// What the list in Settings shows: the apps and notes added, every installed app, or every note in Notes.
+enum SettingsList {
+    case added, apps, notes
+}
+
+private let fullDiskAccessSettings = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"
+
+/// The shortcut and launch at login, with a note when the shortcut can't work, and the heading of the list.
 final class SettingsPage: CanvasView {
     private let shortcut = ShortcutField(frame: .zero)
     private let login = Toggle(frame: .zero)
     private var notice: (title: String, detail: String)?
     var appCount = 0 { didSet { needsDisplay = true } }
-    var adding = false { didSet { needsDisplay = true } }
+    var listing = SettingsList.added { didSet { needsDisplay = true } }
+    var noteCount: Int? { didSet { needsDisplay = true } }  // the notes in Notes, once read
+    /// While choosing notes without access to Notes' database: says how to give it.
+    var needsFullDiskAccess = false { didSet { if needsFullDiskAccess != oldValue { refresh() } } }
     var onLayoutChange: (() -> Void)?
 
     override init(frame: NSRect) {
@@ -153,7 +163,10 @@ final class SettingsPage: CanvasView {
         login.on = SMAppService.mainApp.status == .enabled
         let previous = notice?.title
         let (keyCode, modifiers) = (shortcut.keyCode, shortcut.modifiers)
-        if !shortcut.recording, let owner = systemShortcutUsing(keyCode: keyCode, modifiers: modifiers) {
+        if needsFullDiskAccess {
+            notice = ("Pounce needs Full Disk Access to list your notes.",
+                      "Click here and turn on Pounce in Full Disk Access. Pounce reads only the titles of your notes.")
+        } else if !shortcut.recording, let owner = systemShortcutUsing(keyCode: keyCode, modifiers: modifiers) {
             notice = ("\(shortcutName(keyCode: keyCode, modifiers: modifiers)) still opens \(owner).",
                       "Click here and turn it off in Keyboard Shortcuts, or choose another shortcut above.")
         } else if !shortcut.recording && !HotKey.isRegistered && !HotKey.testing {
@@ -194,8 +207,13 @@ final class SettingsPage: CanvasView {
             drawText(notice.detail, x: side, midY: box.minY + 28, size: 11, color: .secondaryLabelColor)
             y += noticeHeight
         }
-        let heading = adding ? "All apps" : appCount == 0 ? "Your apps" : "Your apps · \(appCount)"
-        let hint = adding ? "Click a circle or press Return to add or remove" : "Add Apps, or type a name, to add more"
+        let heading: String
+        switch listing {
+        case .added: heading = appCount == 0 ? "Your apps" : "Your apps · \(appCount)"
+        case .apps: heading = "All apps"
+        case .notes: heading = noteCount.map { "Notes · \($0)" } ?? "Notes"
+        }
+        let hint = listing != .added ? "Click a circle or press Return to add or remove" : "Add Apps, or type a name, to add more"
         drawText(heading, x: side, midY: y + sectionHeight / 2 + 4, size: 11, weight: .semibold, color: .secondaryLabelColor)
         drawText(hint, x: width - side - textWidth(hint, size: 11), midY: y + sectionHeight / 2 + 4, size: 11, color: .tertiaryLabelColor)
     }
@@ -203,8 +221,10 @@ final class SettingsPage: CanvasView {
     override func mouseDown(with event: NSEvent) {
         guard notice != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
-        if point.y > 6 + 2 * rowSpacing && point.y < 6 + 2 * rowSpacing + noticeHeight,
-           systemShortcutUsing(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers) != nil {
+        guard point.y > 6 + 2 * rowSpacing && point.y < 6 + 2 * rowSpacing + noticeHeight else { return }
+        if needsFullDiskAccess {
+            if let url = URL(string: fullDiskAccessSettings) { NSWorkspace.shared.open(url) }
+        } else if systemShortcutUsing(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers) != nil {
             if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") { NSWorkspace.shared.open(url) }
         }
     }
@@ -224,7 +244,7 @@ final class SettingsPage: CanvasView {
     override func accessibilityLabel() -> String? { "Pounce Settings" }
 }
 
-/// The bottom of the settings: Add Apps (Done while adding) and Remove for the list above, and Quit.
+/// The bottom of the settings: Add Apps (Done while choosing apps or notes) and Remove for the list above, and Quit.
 final class SettingsFooter: CanvasView {
     private let add = FlatButton(frame: .zero)
     private let remove = FlatButton(frame: .zero)
@@ -238,13 +258,13 @@ final class SettingsFooter: CanvasView {
         get { remove.action }
         set { remove.action = newValue }
     }
-    /// Remove works on the selected app, when it is one of the added apps.
+    /// Remove works on the selected app or note, when it is one of the added ones.
     var canRemove = false { didSet { remove.isEnabled = canRemove } }
-    var adding = false {
+    var choosing = false {
         didSet {
-            add.title = adding ? "Done" : "Add Apps"
-            add.glyph = adding ? .check : .plus
-            add.toolTip = adding ? "Back to your apps" : "Find installed apps to add"
+            add.title = choosing ? "Done" : "Add Apps"
+            add.glyph = choosing ? .check : .plus
+            add.toolTip = choosing ? "Back to your apps" : "Find installed apps to add"
         }
     }
 
@@ -255,7 +275,7 @@ final class SettingsFooter: CanvasView {
         add.toolTip = "Find installed apps to add"
         remove.title = "Remove"
         remove.glyph = .minus
-        remove.toolTip = "Remove the selected app from Pounce"
+        remove.toolTip = "Remove the selected app or note from Pounce"
         remove.isEnabled = false
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         quit.title = "Quit"

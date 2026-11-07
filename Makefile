@@ -1,5 +1,5 @@
 APP       := Pounce
-VERSION   := 1.3.0
+VERSION   := 1.4.0
 BUILD     := build
 BUNDLE    := $(BUILD)/$(APP).app
 BINARY    := $(BUNDLE)/Contents/MacOS/$(APP)

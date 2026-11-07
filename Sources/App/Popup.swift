@@ -1,5 +1,5 @@
-// The window: opens in the middle of the main display, finds the added apps as you type, works out arithmetic, and
-// opens the selected app with Return. Settings (⌘,) open inside the same window.
+// The window: opens in the middle of the main display, finds the added apps and notes as you type, works out
+// arithmetic, and opens the selected app or note with Return. Settings (⌘,) open inside the same window.
 
 import AppKit
 import Carbon
@@ -83,7 +83,13 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
     private(set) var isOpen = false
     private(set) var settingsMode = false
     private var removedHere: [String] = []  // unchecked in Settings this time: kept in the list to check again
-    private var adding = false               // Settings list every installed app, to add some
+    private var removedNotesHere: [Note] = []
+    private var listing = SettingsList.added // what the list in Settings shows
+    private var notesInNotes: [Note]?        // every note in Notes, while choosing notes
+    private var notesInNotesHaystacks: [Haystack] = []
+    private var notesProblem: NotesError?    // why Notes' database couldn't be read
+    private var notesReads = 0               // counts reads of Notes' database: only the latest answer counts
+    var notesDatabase = notesDatabasePath    // the test harness reads a test database instead
     private var choseWithKeys = false        // ↑ ↓ (or Tab, ⌃N, ⌃P…) moved the selection since the results last changed
     private var left: CGFloat = 0, top: CGFloat = 0  // the window's top-left corner while it is open
     private var visible = NSRect.zero                // the part of its screen the window may use
@@ -159,9 +165,8 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         guard let panel else { return }
         catalog.refreshIfChanged()
         field?.clear()
-        removedHere = []
-        adding = false
         settingsMode = settings
+        resetSettingsList()
         applyMode()
         refresh()
 
@@ -201,6 +206,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         if settingsMode {
             catalog.trimIcons()
             catalog.forgetInstalled()
+            forgetNotesInNotes()
         }
         // The window goes once AppKit is done with it, then the freed memory goes back to the system.
         DispatchQueue.main.async { [weak self] in
@@ -221,15 +227,24 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         if !on {
             catalog.trimIcons()
             catalog.forgetInstalled()
+            forgetNotesInNotes()
         }
         settingsMode = on
-        adding = false
-        removedHere = []
+        resetSettingsList()
         field?.clear()
         applyMode()
         refresh()
         layout()
         panel?.makeFirstResponder(field)
+    }
+
+    /// Settings open on the apps and notes added. Notes' titles are read again then, in case some changed in Notes.
+    private func resetSettingsList() {
+        listing = .added
+        removedHere = []
+        removedNotesHere = []
+        notesProblem = nil
+        if settingsMode && !catalog.notes.isEmpty { readNotesInBackground() }
     }
 
     private func applyMode() {
@@ -240,7 +255,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
             page.onLayoutChange = { [weak self] in self?.layout() }
             content.addSubview(page)
             let footer = SettingsFooter(frame: .zero)
-            footer.onAdd = { [weak self] in self?.toggleAdding() }
+            footer.onAdd = { [weak self] in self?.addOrDone() }
             footer.onRemove = { [weak self] in self?.removeSelected() }
             content.addSubview(footer)
             (self.page, self.footer) = (page, footer)
@@ -251,12 +266,11 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         footer?.isHidden = !settingsMode
         bottomRule?.isHidden = !settingsMode
         field.badge = settingsMode ? "Settings" : ""
-        applyAddingLabels()
+        applyListingLabels()
         list.rowHeight = settingsMode ? settingsRowHeight : rowHeight
         list.iconSize = settingsMode ? 22 : iconPoints
         list.font = NSFont.systemFont(ofSize: settingsMode ? 13 : 15)
         list.boldFont = NSFont.systemFont(ofSize: settingsMode ? 13 : 15, weight: .semibold)
-        list.accessibilityName = settingsMode ? "Apps" : "Results"
     }
 
     private func layout() {
@@ -337,46 +351,138 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         let query = field.query
         var rows: [ResultRow] = []
         if settingsMode {
-            if !adding && !Query(query).isEmpty {  // typing a name starts adding
-                adding = true
-                applyAddingLabels()
+            if listing == .added && !Query(query).isEmpty {  // typing a name starts adding apps
+                listing = .apps
+                applyListingLabels()
             }
-            if !adding {
-                var shown = catalog.apps.map { ResultRow(kind: .app($0.path), name: $0.name, checked: true) }
-                for path in removedHere where !catalog.contains(path) {
-                    shown.append(ResultRow(kind: .app(path), name: Catalog.displayName(path), checked: false))
-                }
-                rows = shown.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            switch listing {
+            case .added:
+                rows = addedRows()
                 list.emptyText = "No apps yet. Type a name above to add one."
-            } else if Query(query).isEmpty {
+            case .apps where Query(query).isEmpty:
                 rows = catalog.installed().map { ResultRow(kind: .app($0.path), name: $0.name, checked: catalog.contains($0.path)) }
                 list.emptyText = "No apps found"
-            } else {
+            case .apps:
                 let installed = catalog.installed()
                 rows = rank(query, names: installed.map(\.name), haystacks: installed.map(\.haystack), limit: 60).map {
                     let app = installed[$0.index]
                     return ResultRow(kind: .app(app.path), name: app.name, bold: $0.positions, checked: catalog.contains(app.path))
                 }
                 list.emptyText = "No app named “\(query.trimmingCharacters(in: .whitespaces))”"
+            case .notes:
+                rows = notesRows(query)
             }
             page?.appCount = catalog.apps.count
         } else {
             if let value = Calc.evaluate(query, decimal: decimalSeparator) {
                 rows.append(ResultRow(kind: .calc(value, display(value)), name: ""))
             }
-            let apps = catalog.apps
-            // The apps opened before come first, the most recent first: the previous selection wins.
-            let recency = apps.map { recents.place(of: $0.path) }
-            rows += rank(query, names: apps.map(\.name), haystacks: apps.map(\.haystack), recency: recency, limit: maxRows - rows.count).map {
-                ResultRow(kind: .app(apps[$0.index].path), name: apps[$0.index].name, bold: $0.positions)
+            let apps = catalog.apps, notes = catalog.notes
+            // The apps and notes chosen before come first, the most recent first: the previous selection wins.
+            let recency = apps.map { recents.place(of: $0.path) } + notes.map { recents.place(of: $0.link) }
+            let matches = rank(query, names: apps.map(\.name) + notes.map(\.title), haystacks: apps.map(\.haystack) + notes.map(\.haystack),
+                               recency: recency, limit: maxRows - rows.count)
+            rows += matches.map { match in
+                if match.index < apps.count {
+                    return ResultRow(kind: .app(apps[match.index].path), name: apps[match.index].name, bold: match.positions)
+                }
+                let note = notes[match.index - apps.count]
+                return ResultRow(kind: .note(note.id), name: note.title, bold: match.positions, detail: "Notes")
             }
-            list.emptyText = apps.isEmpty ? "No apps added yet. Press ⌘, to add some." : "No match. Press ⌘, to add apps."
+            list.emptyText = apps.isEmpty && notes.isEmpty ? "No apps added yet. Press ⌘, to add some." : "No match. Press ⌘, to add apps."
         }
         // In Settings nothing is selected until there is something to look for: the list is for reading first.
         list.setRows(rows, select: !settingsMode || !Query(query).isEmpty)
         choseWithKeys = false  // new results: Return on the top one is no choice
         updateFooter()
         if tracing { NSLog("query [%@] %ld rows %.3f ms", query, rows.count, (CACurrentMediaTime() - start) * 1000) }
+    }
+
+    /// Settings' own list: the added apps by name, and under Notes, with its Choose Notes button, the added notes. What
+    /// was unchecked this time stays, unchecked, until Settings close.
+    private func addedRows() -> [ResultRow] {
+        var apps = catalog.apps.map { ResultRow(kind: .app($0.path), name: $0.name, checked: true) }
+        for path in removedHere where !catalog.contains(path) {
+            apps.append(ResultRow(kind: .app(path), name: Catalog.displayName(path), checked: false))
+        }
+        var notes = catalog.notes.map { ResultRow(kind: .note($0.id), name: $0.title, checked: true, indented: true) }
+        for note in removedNotesHere where !catalog.containsNote(note.id) {
+            notes.append(ResultRow(kind: .note(note.id), name: note.title, checked: false, indented: true))
+        }
+        notes.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        // Notes added while Notes itself isn't: Notes is listed, unchecked, to hold them.
+        if !notes.isEmpty && !apps.contains(where: { $0.path.map(catalog.isNotesApp) == true }) {
+            apps.append(ResultRow(kind: .app(Catalog.notesApp), name: Catalog.displayName(Catalog.notesApp), checked: false))
+        }
+        apps.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        if let index = apps.firstIndex(where: { $0.path.map(catalog.isNotesApp) == true }) {
+            apps[index].accessory = "Choose Notes"
+            apps.insert(contentsOf: notes, at: index + 1)
+        }
+        return apps
+    }
+
+    /// Choose Notes: every note in Notes, the most recently changed first, or the ones matching what was typed.
+    private func notesRows(_ query: String) -> [ResultRow] {
+        guard let list else { return [] }
+        guard let all = notesInNotes else {
+            switch notesProblem {
+            case nil: list.emptyText = "Reading your notes…"
+            case .noAccess: list.emptyText = "Your notes appear here once Pounce has Full Disk Access"
+            case .missing: list.emptyText = "Notes has no notes on this Mac yet"
+            case .unreadable: list.emptyText = "Pounce couldn’t read your notes"
+            }
+            return []
+        }
+        list.emptyText = all.isEmpty ? "Notes has no notes on this Mac yet" : "No note named “\(query.trimmingCharacters(in: .whitespaces))”"
+        if Query(query).isEmpty {
+            return all.map { ResultRow(kind: .note($0.id), name: $0.title, checked: catalog.containsNote($0.id)) }
+        }
+        return rank(query, names: all.map(\.title), haystacks: notesInNotesHaystacks, limit: 60).map {
+            let note = all[$0.index]
+            return ResultRow(kind: .note(note.id), name: note.title, bold: $0.positions, checked: catalog.containsNote(note.id))
+        }
+    }
+
+    // MARK: Notes' database
+
+    /// Reads the notes in Notes off the main thread (with Full Disk Access, macOS may first ask about it).
+    private func readNotesInBackground() {
+        notesReads += 1
+        let read = notesReads, path = notesDatabase
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = readNotes(at: path)
+            let popup = self
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { popup?.notesArrived(result, read: read) }
+            }
+        }
+    }
+
+    private func notesArrived(_ result: Result<[Note], NotesError>, read: Int) {
+        guard read == notesReads, isOpen, settingsMode else { return }
+        var changed = listing == .notes
+        switch result {
+        case .success(let notes):
+            notesProblem = nil
+            if catalog.updateNotes(from: notes) { changed = true }  // titles changed in Notes, deleted notes went
+            if listing == .notes {
+                notesInNotes = notes
+                notesInNotesHaystacks = notes.map { prepare($0.title) }
+            }
+        case .failure(let problem):
+            notesProblem = problem
+        }
+        guard changed else { return }
+        applyListingLabels()
+        refresh()
+        layout()
+    }
+
+    private func forgetNotesInNotes() {
+        notesReads += 1  // an answer still on its way is dropped
+        notesInNotes = nil
+        notesInNotesHaystacks = []
     }
 
     /// The result as people write numbers where they live: grouped digits and their decimal separator.
@@ -413,8 +519,8 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
                 if field?.query.isEmpty == false {
                     field?.clear()
                     queryChanged()
-                } else if adding {
-                    toggleAdding()
+                } else if listing != .added {
+                    setListing(.added)
                 } else {
                     setSettings(false)
                 }
@@ -445,6 +551,7 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         guard flags == .command else { return false }
         switch keyCharacter(event) {
         case ",": setSettings(!settingsMode)
+        case "n" where settingsMode: setListing(listing == .notes ? .added : .notes)  // Choose Notes, from the keyboard
         case "q": NSApp.terminate(nil)
         case "w": close()
         case "v": field?.paste()
@@ -461,11 +568,15 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
 
     // MARK: Actions
 
-    /// In Settings a click on a row's circle adds or removes the app, and a click elsewhere selects it (for Remove);
-    /// in the results a click opens the app.
-    func listDidClick(_ row: Int, onCheck: Bool) {
-        if settingsMode && !onCheck {
-            list?.selected = row
+    /// In Settings a click on a row's circle adds or removes the app or note, a click on Choose Notes lists the notes
+    /// in Notes, and a click elsewhere selects the row (for Remove); in the results a click opens the app or note.
+    func listDidClick(_ row: Int, part: ResultList.Part) {
+        if settingsMode {
+            switch part {
+            case .check: activate(row, chosen: true)
+            case .accessory where list?.rows.indices.contains(row) == true && list?.rows[row].accessory != nil: setListing(.notes)
+            case .row, .accessory: list?.selected = row
+            }
             return
         }
         activate(row, chosen: true)  // a click is always a choice
@@ -476,23 +587,36 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
         catalog.icon(path, points: iconPoints, scale: scale)
     }
 
-    /// Opens a result (in Settings: adds or removes the app). `chosen`: picked with the arrow keys or a click, not just
-    /// the top result taken with Return. Only a choice moves the app to the front of the order.
+    /// Opens a result (in Settings: adds or removes the app or note). `chosen`: picked with the arrow keys or a click,
+    /// not just the top result taken with Return. Only a choice moves the app or note to the front of the order.
     private func activate(_ index: Int, chosen: Bool) {
         guard let list, list.rows.indices.contains(index) else { return }
         let row = list.rows[index]
         if settingsMode {
-            guard let path = row.path else { return }
-            if catalog.contains(path) {
-                catalog.remove(path)
-                removedHere.append(path)
-                recents.forget(path)
-                defaults.set(recents.paths, forKey: Defaults.recents)
-            } else {
-                catalog.add(path)
-                removedHere.removeAll { $0 == path }
+            switch row.kind {
+            case .app(let path):
+                if catalog.contains(path) {
+                    catalog.remove(path)
+                    removedHere.append(path)
+                    forgetChoice(path)
+                } else {
+                    catalog.add(path)
+                    removedHere.removeAll { $0 == path }
+                }
+                list.setChecked(catalog.contains(path), at: index)
+            case .note(let id):
+                if catalog.containsNote(id) {
+                    catalog.removeNote(id)
+                    removedNotesHere.append(Note(id: id, title: row.name))
+                    if let link = noteLink(id) { forgetChoice(link) }
+                } else {
+                    catalog.addNote(Note(id: id, title: row.name))
+                    removedNotesHere.removeAll { $0.id == id }
+                }
+                list.setChecked(catalog.containsNote(id), at: index)
+            case .calc:
+                return
             }
-            list.setChecked(catalog.contains(path), at: index)
             page?.appCount = catalog.apps.count
             updateFooter()
             return
@@ -502,31 +626,62 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
             copy(plain(value))
             close()
         case .app(let path):
-            if chosen {  // first in line from now on
-                recents.record(path)
-                defaults.set(recents.paths, forKey: Defaults.recents)
-            }
+            if chosen { record(path) }  // first in line from now on
             close()
             if let openForTesting { openForTesting(path) } else { open(path) }
+        case .note(let id):
+            guard let link = noteLink(id) else { return }
+            if chosen { record(link) }
+            close()
+            if let openForTesting { openForTesting(link) } else { openNote(link) }
         }
     }
 
-    /// Add Apps: the list shows every installed app and the search line looks through them; Done (or Esc) goes back to
-    /// the added apps.
-    private func toggleAdding() {
+    private func record(_ choice: String) {
+        recents.record(choice)
+        defaults.set(recents.paths, forKey: Defaults.recents)
+    }
+
+    /// An app or note taken out of Pounce loses its place in the order.
+    private func forgetChoice(_ choice: String) {
+        recents.forget(choice)
+        defaults.set(recents.paths, forKey: Defaults.recents)
+    }
+
+    /// Add Apps lists every installed app, Choose Notes every note in Notes; Done (or Esc) goes back to the added ones.
+    private func addOrDone() {
+        setListing(listing == .added ? .apps : .added)
+    }
+
+    private func setListing(_ new: SettingsList) {
         guard settingsMode else { return }
-        adding.toggle()
+        listing = new
         field?.clear()
-        applyAddingLabels()
+        if new == .notes {
+            notesProblem = nil
+            readNotesInBackground()
+        } else {
+            notesInNotes = nil  // a title refresh still on its way is welcome
+            notesInNotesHaystacks = []
+        }
+        applyListingLabels()
         refresh()
         layout()
         panel?.makeFirstResponder(field)
     }
 
-    private func applyAddingLabels() {
-        field?.placeholder = !settingsMode ? "Search" : adding ? "Search apps to add" : "Type an app’s name to add it"
-        page?.adding = adding
-        footer?.adding = adding
+    private func applyListingLabels() {
+        switch (settingsMode, listing) {
+        case (false, _): field?.placeholder = "Search"
+        case (true, .added): field?.placeholder = "Type an app’s name to add it"
+        case (true, .apps): field?.placeholder = "Search apps to add"
+        case (true, .notes): field?.placeholder = "Search notes to add"
+        }
+        page?.listing = listing
+        page?.noteCount = notesInNotes?.count
+        page?.needsFullDiskAccess = settingsMode && listing == .notes && notesProblem == .noAccess
+        footer?.choosing = listing != .added
+        list?.accessibilityName = !settingsMode ? "Results" : listing == .notes ? "Notes" : "Apps"
     }
 
     private func updateFooter() {
@@ -561,6 +716,18 @@ final class Popup: NSObject, NSWindowDelegate, SearchFieldDelegate, ResultListDe
             }
         }
         if tracing { NSLog("open app %.2f ms", (CACurrentMediaTime() - start) * 1000) }
+    }
+
+    /// Opens Notes on the note, with its applenotes: link.
+    private func openNote(_ link: String) {
+        guard let url = URL(string: link) else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.open(url, configuration: configuration) { _, error in
+            guard let error else { return }
+            NSLog("Pounce couldn't open a note: %@", error.localizedDescription)
+            Task { @MainActor in NSSound.beep() }
+        }
     }
 
     // MARK: For the test harness

@@ -1,6 +1,7 @@
 // Unit tests for the core: `make test` (built with AddressSanitizer and UndefinedBehaviorSanitizer).
 
 import Darwin
+import SQLite3
 
 nonisolated(unsafe) var failures = 0
 nonisolated(unsafe) var checks = 0
@@ -491,6 +492,80 @@ check(decodeUTF8([0xFF, 0x41, 0xC3]) == [0xFFFD, 0x41, 0xFFFD])
 check(decodeUTF8([0xC0, 0x80]) == [0xFFFD, 0xFFFD])     // overlong
 check(decodeUTF8([0xED, 0xA0, 0x80]) == [0xFFFD, 0xFFFD, 0xFFFD])  // surrogate
 check(fold(0x41) == 0x61 && fold(0xC9) == 0x65 && fold(0xD7) == 0xD7 && fold(0x391) == 0x3B1)
+
+// MARK: Notes
+
+let noteID = "5E3B0C4A-9D2F-4A61-B8E7-2C1D0F9A6B35"
+check(noteLink(noteID) == "applenotes:note/" + noteID)
+check(noteLink(noteID.lowercased()) != nil)
+for bad in ["", "5E3B0C4A9D2F4A61B8E72C1D0F9A6B35", "5E3B0C4A-9D2F-4A61-B8E7-2C1D0F9A6B3G", "5E3B0C4A-9D2F-4A61-B8E7-2C1D0F9A6B351",
+            "../../x", "5E3B0C4A-9D2F-4A61-B8E7-2C1D0F9A6B3/", "5E3B0C4A-9D2F-4A61-B8E72C1D0F9A6B35-"] {
+    check(noteLink(bad) == nil, bad)
+}
+check(noteTitle("  Groceries \n") == "Groceries")
+check(noteTitle("Plan\u{FFFC}") == "Plan" && noteTitle("\u{FFFC} ") == "" && noteTitle("Café ☕️") == "Café ☕️")
+
+/// A database laid out like Notes', with the rows given.
+func makeNotesDatabase(_ path: String, _ rows: String) -> Bool {
+    unlink(path)
+    var database: OpaquePointer?
+    guard sqlite3_open(path, &database) == SQLITE_OK else {
+        sqlite3_close(database)
+        return false
+    }
+    defer { sqlite3_close(database) }
+    let schema = """
+        CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER PRIMARY KEY, Z_NAME VARCHAR);
+        INSERT INTO Z_PRIMARYKEY VALUES (5, 'ICAttachment'), (12, 'ICNote'), (15, 'ICFolder');
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, ZIDENTIFIER VARCHAR, ZTITLE1 VARCHAR,
+            ZMARKEDFORDELETION INTEGER, ZFOLDER INTEGER, ZFOLDERTYPE INTEGER, ZMODIFICATIONDATE1 TIMESTAMP);
+        """
+    return sqlite3_exec(database, schema + rows, nil, nil, nil) == SQLITE_OK
+}
+
+let temporary = getenv("TMPDIR").map { String(cString: $0) } ?? "/tmp/"
+let notesPath = temporary + "pounce-tests-\(getpid())-notes.sqlite"
+func id(_ n: Int) -> String { "A0000000-0000-0000-0000-0000000000" + (n < 10 ? "0\(n)" : "\(n)") }
+let made = makeNotesDatabase(notesPath, """
+    INSERT INTO ZICCLOUDSYNCINGOBJECT VALUES
+        (1, 15, 'F0000000-0000-0000-0000-000000000001', NULL, 0, NULL, 0, NULL),   -- a folder
+        (2, 15, 'F0000000-0000-0000-0000-000000000002', NULL, 0, NULL, 1, NULL),   -- Recently Deleted
+        (3, 15, 'F0000000-0000-0000-0000-000000000003', NULL, 1, NULL, 0, NULL),   -- a deleted folder
+        (10, 12, '\(id(1))', 'Groceries', 0, 1, NULL, 300),
+        (11, 12, '\(id(2))', '  Recipes', NULL, 1, NULL, 500),
+        (12, 12, '\(id(3))', 'Deleted', 1, 1, NULL, 900),
+        (13, 12, '\(id(4))', 'In Recently Deleted', 0, 2, NULL, 800),
+        (14, 12, '\(id(5))', NULL, 0, NULL, NULL, 700),                           -- an empty stand-in
+        (15, 12, '\(id(6))', '   ', 0, 1, NULL, 600),
+        (16, 12, 'not-a-note-identifier', 'Odd', 0, 1, NULL, 650),
+        (17, 12, '\(id(7))', 'In a deleted folder', 0, 3, NULL, 640),
+        (18, 12, '\(id(8))', 'Plan\u{FFFC}', 0, 1, NULL, 100),
+        (19, 5, '\(id(9))', 'An attachment', 0, 1, NULL, 999);
+    """)
+check(made, "the test database")
+check(readNotes(at: notesPath) == .success([Note(id: id(2), title: "Recipes"), Note(id: id(1), title: "Groceries"), Note(id: id(8), title: "Plan")]),
+      "\(readNotes(at: notesPath))")
+check(readNotes(at: temporary + "pounce-tests-no-such-dir/NoteStore.sqlite") == .failure(.missing))
+// A file Pounce may not open answers like the database without Full Disk Access.
+chmod(notesPath, 0)
+check(readNotes(at: notesPath) == .failure(.noAccess))
+chmod(notesPath, 0o644)
+// Not a database, or a database without Notes' tables.
+let textPath = temporary + "pounce-tests-\(getpid())-text.sqlite"
+if let file = fopen(textPath, "w") {
+    fputs("these are not the notes you are looking for\n", file)
+    fclose(file)
+}
+check(readNotes(at: textPath) == .failure(.unreadable))
+check(makeNotesDatabase(notesPath, "DROP TABLE Z_PRIMARYKEY;") && readNotes(at: notesPath) == .failure(.unreadable))
+check(makeNotesDatabase(notesPath, "") && readNotes(at: notesPath) == .success([]))
+unlink(notesPath)
+unlink(textPath)
+
+// Notes are ranked with the apps: a note chosen before comes first, as an app would.
+let mixed = ["Notes", "Numbers", "New Ideas"]
+check(rank("n", names: mixed, haystacks: mixed.map(prepare)).map(\.index) == [0, 1, 2])
+check(rank("n", names: mixed, haystacks: mixed.map(prepare), recency: [nil, nil, 0]).map(\.index) == [2, 0, 1])
 
 print(failures == 0 ? "All \(checks) checks passed" : "\(failures) of \(checks) checks failed")
 exit(failures == 0 ? 0 : 1)

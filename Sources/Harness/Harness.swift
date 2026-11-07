@@ -8,6 +8,8 @@
 //   appearance light|dark|system                  footprint              memory in use (bytes)
 //   bench <n>             open + type + close n times, with timings     wait <ms>   quit
 //   offscreen on|off      keep the window out of sight (long runs)
+//   click <row> [check|button]   a click on a row, its circle or its button
+//   notes <id>=<title>|…  the added notes          notesdb <path>         read notes from this database, not Notes'
 
 import AppKit
 import Carbon
@@ -67,11 +69,16 @@ private func state() -> String {
         lines.append("frame=\(Int(f.minX)),\(Int(f.minY)),\(Int(f.width))x\(Int(f.height)) key=\(panel.isKeyWindow) window=\(panel.windowNumber)")
     }
     for (index, row) in popup.rowsForTesting.enumerated() {
+        let check = row.checked.map { $0 ? " [x]" : " [ ]" } ?? ""
+        let extras = (row.indented ? " indented" : "") + (row.accessory.map { " {\($0)}" } ?? "") + (row.detail.map { " <\($0)>" } ?? "")
         switch row.kind {
         case .calc(_, let shown): lines.append("  \(index): = \(shown)")
-        case .app(let path): lines.append("  \(index): \(row.name)\(row.checked.map { $0 ? " [x]" : " [ ]" } ?? "") (\(path)) bold=\(row.bold)")
+        case .app(let path): lines.append("  \(index): \(row.name)\(check) (\(path)) bold=\(row.bold)\(extras)")
+        case .note(let id): lines.append("  \(index): \(row.name)\(check) (note \(id)) bold=\(row.bold)\(extras)")
         }
     }
+    if popup.rowsForTesting.isEmpty, let empty = popup.list?.emptyText, !empty.isEmpty { lines.append("  (empty: \(empty))") }
+    if popup.settingsMode, let page = popup.page, page.needsFullDiskAccess { lines.append("  notice: Full Disk Access") }
     return lines.joined(separator: "\n")
 }
 
@@ -186,7 +193,20 @@ private func run(_ line: String) {
         }
         reply("open: \(summary(openTimes)); per keystroke: \(summary(typeTimes)); close: \(summary(closeTimes))")
     case "click":  // a click on a row, as the pointer would make it
-        popup.listDidClick(Int(argument) ?? 0, onCheck: false)
+        let words = argument.split(separator: " ")
+        let part: ResultList.Part = words.dropFirst().first == "check" ? .check : words.dropFirst().first == "button" ? .accessory : .row
+        popup.listDidClick(Int(words.first ?? "0") ?? 0, part: part)
+        reply("ok")
+    case "notes":
+        let notes = argument.split(separator: "|").compactMap { item -> [String: String]? in
+            let pair = item.split(separator: "=", maxSplits: 1).map(String.init)
+            return pair.count == 2 ? ["id": pair[0], "title": pair[1]] : nil
+        }
+        UserDefaults.standard.set(notes, forKey: Defaults.notes)
+        popup.catalog.load()
+        reply("ok \(popup.catalog.notes.count) notes")
+    case "notesdb":
+        popup.notesDatabase = argument
         reply("ok")
     case "recents":
         reply(UserDefaults.standard.stringArray(forKey: Defaults.recents)?.joined(separator: " | ") ?? "(none)")
@@ -212,6 +232,9 @@ func startHarness(_ popup: Popup) {
     // Never the real clipboard: tests copy results and paste text.
     popup.pasteboard = NSPasteboard(name: NSPasteboard.Name("app.pounce.test.\(getpid())"))
     HotKey.testing = true  // the test copy never registers the real shortcut
+    // Never the real notes (a test started from a terminal with Full Disk Access could read them): `notesdb` points
+    // it at a test database.
+    popup.notesDatabase = "/nonexistent/NoteStore.sqlite"
     let input = FileHandle.standardInput
     Thread.detachNewThread {
         while let line = readLine() {
