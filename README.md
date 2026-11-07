@@ -112,9 +112,18 @@ cd pounce
 make install    # builds Pounce.app, copies it to /Applications and starts it
 ```
 
-**Upgrading from Launcher?** Pounce was called Launcher before version 1.3. `brew upgrade` moves the `launcher`
-cask over to `pounce`, and Pounce's first launch takes over Launcher's settings: your apps, their order and your
-shortcut.
+**Upgrading from Launcher?** Pounce was called Launcher before version 1.3. Homebrew trusts casks from other taps
+by name, so tell it to trust the new name, then move the `launcher` cask over to `pounce`:
+
+```sh
+brew update
+brew trust --cask bhaskar0210s/tap/pounce
+brew migrate --cask launcher
+brew upgrade --cask pounce
+```
+
+Pounce's first launch takes over Launcher's settings: your apps, their order and your shortcut. With the install
+script, just run it again.
 
 The first launch from Applications adds Pounce to your login items and shows its settings, where you add your
 apps. Pounce has no Dock icon and no menu bar icon: press the shortcut to use it, and press <kbd>⌘</kbd><kbd>,</kbd>
